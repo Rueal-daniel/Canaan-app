@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download Canaan App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f4f8;
+        }
+        .container {
+            text-align: center;
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        h1 { color: #1565C0; margin-bottom: 10px; }
+        p { color: #666; margin-bottom: 25px; }
+        .btn {
+            display: inline-block;
+            padding: 15px 40px;
+            background-color: #1565C0;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Canaan Sunday School App</h1>
+        <p>Tap the button below to download the app</p>
+        <a id="downloadBtn" class="btn" href="#">Download APK</a>
+    </div>
+    <script>
+        var apkUrl = "https://rueal-daniel.github.io/Canaan-app/app-release.apk";
+        document.getElementById("downloadBtn").href = apkUrl;
+        window.location.href = apkUrl;
+    </script>
+</body>
+</html>
