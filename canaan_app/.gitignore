@@ -1,0 +1,40 @@
+# Build outputs
+**/build/
+/build/
+/android/app/debug/
+/android/app/profile/
+/android/app/release/
+
+# Dart/Flutter cache
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+**/doc/api/
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and crash files
+*.log
+hs_err_pid*.log
+
+# Generated
+.metadata
+migrate_working_dir/
+coverage/
+app.*.symbols
+app.*.map.json
+android/gradlew
+android/gradlew.bat
+android/.gradle/
+android/local.properties
