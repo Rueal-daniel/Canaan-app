@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../widgets/profile_card.dart';
 import '../../widgets/animations.dart';
+import '../../services/auth_service.dart';
 import '../login_screen.dart';
 import 'student_management.dart';
 
@@ -106,7 +107,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
           IconButton(
             icon: const Icon(Icons.logout_rounded),
             color: Colors.white,
-            onPressed: () {
+            onPressed: () async {
+              await AuthService().logout();
+              if (!context.mounted) return;
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(builder: (_) => const LoginScreen()),

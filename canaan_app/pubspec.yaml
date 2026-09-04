@@ -34,6 +34,10 @@ dependencies:
   cupertino_icons: ^1.0.8
   supabase_flutter: ^2.8.4
   google_fonts: ^6.2.1
+  shared_preferences: ^2.5.5
+  file_picker: ^12.2.0
+  image_picker: ^1.2.3
+  image: ^4.9.2
 
 dev_dependencies:
   flutter_test:

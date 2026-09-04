@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../widgets/animations.dart';
+import '../../services/auth_service.dart';
 import '../login_screen.dart';
 import '../admin/student_management.dart';
 
@@ -24,6 +25,8 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
   final _client = Supabase.instance.client;
 
   String? _teacherSection;
+  String? _teacherId;
+  String? _teacherName;
   int _myStudentCount = 0;
   int _memoryVerseCount = 1;
   int _lessonPlanCount = 0;
@@ -39,29 +42,41 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
 
   Future<void> _fetchData() async {
     try {
-      // 1. Resolve teacher's own section
+      // 1. Resolve teacher's own id, name and section
       String? section = widget.section;
+      String? teacherId;
+      String? teacherName = widget.fullName;
 
-      if (section == null && widget.username != null && widget.username!.isNotEmpty) {
+      if (section == null &&
+          widget.username != null &&
+          widget.username!.isNotEmpty) {
         try {
           final t = await _client
               .from('teachers')
-              .select('section')
+              .select('id, full_name, section')
               .eq('username', widget.username!)
               .maybeSingle();
-          section = t?['section'] as String?;
+          section ??= t?['section'] as String?;
+          teacherId = t?['id']?.toString();
+          if (t?['full_name'] != null) {
+            teacherName = t!['full_name'] as String;
+          }
         } catch (_) {}
       }
 
       // Fallback: try lookup by full_name (in case username wasn't passed)
-      if (section == null) {
+      if (section == null || teacherId == null) {
         try {
           final t2 = await _client
               .from('teachers')
-              .select('section')
+              .select('id, full_name, section')
               .eq('full_name', widget.fullName)
               .maybeSingle();
-          section = t2?['section'] as String?;
+          section ??= t2?['section'] as String?;
+          teacherId ??= t2?['id']?.toString();
+          if (t2?['full_name'] != null) {
+            teacherName = t2!['full_name'] as String;
+          }
         } catch (_) {}
       }
 
@@ -97,6 +112,8 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
       if (mounted) {
         setState(() {
           _teacherSection = section;
+          _teacherId = teacherId;
+          _teacherName = teacherName;
           _myStudentCount = myCount;
           _memoryVerseCount = memoryCount;
           _lessonPlanCount = lessonCount;
@@ -127,10 +144,13 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
         page: StudentManagement(
           lockedSection: _teacherSection,
           readOnly: true,
+          teacherId: _teacherId ?? '',
+          teacherName: _teacherName ?? widget.fullName,
         ),
       ),
     );
   }
+
   String _formatSection(String? section) {
     if (section == null || section.isEmpty) return 'Not Assigned';
     if (section == 'sub-junior') return 'Sub Junior';
@@ -200,7 +220,9 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
               IconButton(
                 icon: const Icon(Icons.logout_rounded),
                 color: Colors.white,
-                onPressed: () {
+                onPressed: () async {
+                  await AuthService().logout();
+                  if (!context.mounted) return;
                   Navigator.pushAndRemoveUntil(
                       context, MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
                 },

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
+import '../services/session_service.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/animations.dart';
 import 'admin/admin_dashboard.dart';
@@ -8,7 +9,10 @@ import 'teacher/teacher_dashboard.dart';
 import 'student/student_dashboard.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  /// When true, shows the "Account Suspended" notice on open
+  /// (used after a suspended session is blocked).
+  final bool suspendedNotice;
+  const LoginScreen({super.key, this.suspendedNotice = false});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -30,6 +34,84 @@ class _LoginScreenState extends State<LoginScreen> {
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.suspendedNotice) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showSuspendedDialog();
+      });
+    }
+  }
+
+  void _showSuspendedDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: Color(0xFFEF4444),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.block_rounded,
+                color: Colors.white,
+                size: 36,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Account Suspended',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 19,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF111827),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'You have been suspended by the Admin. You cannot access the Student Dashboard at this time. Please contact the Admin for more information.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 13.5,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1565C0),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+                child: Text(
+                  'OK',
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _handleLogin() async {
@@ -57,10 +139,21 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (user != null) {
+        // Persist the Supabase login session (row id + role ONLY).
+        // Never store username or password locally.
+        final userId = user['id']?.toString();
+        if (userId != null && userId.isNotEmpty) {
+          await SessionService.saveSession(
+            userId: userId,
+            role: _selectedRole!.name,
+          );
+        }
         Widget dashboard;
         switch (_selectedRole!) {
           case UserRole.admin:
-            dashboard = AdminDashboard(fullName: user['full_name'] ?? user['username']);
+            dashboard = AdminDashboard(
+              fullName: user['full_name'] ?? user['username'],
+            );
             break;
           case UserRole.teacher:
             dashboard = TeacherDashboard(
@@ -77,15 +170,15 @@ class _LoginScreenState extends State<LoginScreen> {
             break;
         }
         if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          SlidePageRoute(page: dashboard),
-        );
+        Navigator.pushReplacement(context, SlidePageRoute(page: dashboard));
       } else {
         setState(() {
           _errorMessage = 'Invalid username or password';
         });
       }
+    } on AccountSuspendedException {
+      if (!mounted) return;
+      _showSuspendedDialog();
     } catch (e) {
       setState(() {
         _errorMessage = 'Connection error. Please try again.';
@@ -171,11 +264,29 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         Row(
           children: [
-            Expanded(child: _buildRoleCard(UserRole.admin, Icons.admin_panel_settings_rounded, 'Admin')),
+            Expanded(
+              child: _buildRoleCard(
+                UserRole.admin,
+                Icons.admin_panel_settings_rounded,
+                'Admin',
+              ),
+            ),
             const SizedBox(width: 12),
-            Expanded(child: _buildRoleCard(UserRole.teacher, Icons.co_present_rounded, 'Teacher')),
+            Expanded(
+              child: _buildRoleCard(
+                UserRole.teacher,
+                Icons.co_present_rounded,
+                'Teacher',
+              ),
+            ),
             const SizedBox(width: 12),
-            Expanded(child: _buildRoleCard(UserRole.student, Icons.school_rounded, 'Student')),
+            Expanded(
+              child: _buildRoleCard(
+                UserRole.student,
+                Icons.school_rounded,
+                'Student',
+              ),
+            ),
           ],
         ),
       ],
@@ -257,7 +368,9 @@ class _LoginScreenState extends State<LoginScreen> {
             hintText: 'Enter your username',
             icon: Icons.person_outline_rounded,
             validator: (value) {
-              if (value == null || value.isEmpty) return 'Please enter your username';
+              if (value == null || value.isEmpty) {
+                return 'Please enter your username';
+              }
               return null;
             },
           ),
@@ -269,14 +382,19 @@ class _LoginScreenState extends State<LoginScreen> {
             obscureText: _obscurePassword,
             suffixIcon: IconButton(
               icon: Icon(
-                _obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                _obscurePassword
+                    ? Icons.visibility_off_rounded
+                    : Icons.visibility_rounded,
                 color: Colors.grey.shade400,
                 size: 22,
               ),
-              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+              onPressed: () =>
+                  setState(() => _obscurePassword = !_obscurePassword),
             ),
             validator: (value) {
-              if (value == null || value.isEmpty) return 'Please enter your password';
+              if (value == null || value.isEmpty) {
+                return 'Please enter your password';
+              }
               return null;
             },
           ),
@@ -306,7 +424,11 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.error_outline_rounded, color: Colors.red.shade600, size: 20),
+                  Icon(
+                    Icons.error_outline_rounded,
+                    color: Colors.red.shade600,
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -330,8 +452,12 @@ class _LoginScreenState extends State<LoginScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1565C0),
                 foregroundColor: Colors.white,
-                disabledBackgroundColor: const Color(0xFF1565C0).withValues(alpha: 0.6),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                disabledBackgroundColor: const Color(
+                  0xFF1565C0,
+                ).withValues(alpha: 0.6),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
                 elevation: 0,
               ),
               child: _isLoading

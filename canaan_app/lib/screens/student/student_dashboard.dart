@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/animations.dart';
+import '../../services/auth_service.dart';
+import '../../services/session_service.dart';
 import '../login_screen.dart';
+import 'my_attendance.dart';
 
 class StudentDashboard extends StatefulWidget {
   final String fullName;
@@ -13,6 +18,54 @@ class StudentDashboard extends StatefulWidget {
 }
 
 class _StudentDashboardState extends State<StudentDashboard> {
+  Timer? _suspensionTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Block access if this account has been suspended — including
+    // suspension that happened while already logged in.
+    _guardSuspension();
+    _suspensionTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _guardSuspension(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _suspensionTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _guardSuspension() async {
+    try {
+      final session = await SessionService.getSession();
+      if (session == null || session.role != UserRole.student.name) return;
+      final auth = AuthService();
+      final profile = await auth.getUserById(
+        userId: session.userId,
+        role: UserRole.student,
+      );
+      if (!AuthService.isSuspended(profile)) return;
+      await auth.logout();
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const LoginScreen(suspendedNotice: true),
+        ),
+        (_) => false,
+      );
+    } catch (_) {}
+  }
+
+  void _openAttendance() {
+    Navigator.push(
+      context,
+      SlidePageRoute(page: MyAttendance(fullName: widget.fullName)),
+    );
+  }
 
   String _getInitials(String name) {
     final parts = name.trim().split(RegExp(r'\s+'));
@@ -36,7 +89,11 @@ class _StudentDashboardState extends State<StudentDashboard> {
               background: Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Color(0xFF0D47A1), Color(0xFF1565C0), Color(0xFF64B5F6)],
+                    colors: [
+                      Color(0xFF0D47A1),
+                      Color(0xFF1565C0),
+                      Color(0xFF64B5F6),
+                    ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -49,27 +106,53 @@ class _StudentDashboardState extends State<StudentDashboard> {
                       CircleAvatar(
                         radius: 40,
                         backgroundColor: Colors.white.withValues(alpha: 0.2),
-                        backgroundImage: widget.photoUrl != null && widget.photoUrl!.isNotEmpty
-                            ? NetworkImage('https://pjytoxyddfrsrkzappbb.supabase.co/storage/v1/object/public/student-photos/${widget.photoUrl}')
+                        backgroundImage:
+                            widget.photoUrl != null &&
+                                widget.photoUrl!.isNotEmpty
+                            ? NetworkImage(
+                                'https://pjytoxyddfrsrkzappbb.supabase.co/storage/v1/object/public/student-photos/${widget.photoUrl}',
+                              )
                             : null,
                         onBackgroundImageError: (_, _) {},
-                        child: widget.photoUrl == null || widget.photoUrl!.isEmpty
+                        child:
+                            widget.photoUrl == null || widget.photoUrl!.isEmpty
                             ? Text(
                                 _getInitials(widget.fullName),
-                                style: GoogleFonts.poppins(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
                               )
                             : null,
                       ),
                       const SizedBox(height: 12),
-                      Text(widget.fullName, style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                      Text(
+                        widget.fullName,
+                        style: GoogleFonts.poppins(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
                       const SizedBox(height: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: Text('Student', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
+                        child: Text(
+                          'Student',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -80,8 +163,14 @@ class _StudentDashboardState extends State<StudentDashboard> {
               IconButton(
                 icon: const Icon(Icons.logout_rounded),
                 color: Colors.white,
-                onPressed: () {
-                  Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
+                onPressed: () async {
+                  await AuthService().logout();
+                  if (!context.mounted) return;
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    (_) => false,
+                  );
                 },
               ),
             ],
@@ -96,11 +185,14 @@ class _StudentDashboardState extends State<StudentDashboard> {
                   const SizedBox(height: 20),
                   FadeInSlide(
                     index: 1,
-                    child: Text('Overview',
-                        style: GoogleFonts.poppins(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF111827))),
+                    child: Text(
+                      'Overview',
+                      style: GoogleFonts.poppins(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF111827),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   FadeInSlide(
@@ -110,6 +202,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                       value: '100%',
                       icon: Icons.check_circle_outline_rounded,
                       color: const Color(0xFF22C55E),
+                      onTap: _openAttendance,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -152,6 +245,9 @@ class _StudentDashboardState extends State<StudentDashboard> {
                       color: const Color(0xFF9333EA),
                     ),
                   ),
+                  const SizedBox(height: 20),
+                  FadeInSlide(index: 6, child: _buildQuickLinks()),
+                  const SizedBox(height: 8),
                 ],
               ),
             ),
@@ -167,24 +263,124 @@ class _StudentDashboardState extends State<StudentDashboard> {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [const Color(0xFF1565C0).withValues(alpha: 0.1), const Color(0xFF42A5F5).withValues(alpha: 0.08)],
+          colors: [
+            const Color(0xFF1565C0).withValues(alpha: 0.1),
+            const Color(0xFF42A5F5).withValues(alpha: 0.08),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF1565C0).withValues(alpha: 0.15)),
+        border: Border.all(
+          color: const Color(0xFF1565C0).withValues(alpha: 0.15),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Welcome back!', style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF0D47A1))),
+          Text(
+            'Welcome back!',
+            style: GoogleFonts.poppins(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF0D47A1),
+            ),
+          ),
           const SizedBox(height: 6),
           Text(
             'Ready to learn something new today?',
-            style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey.shade600),
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  /// Quick Links — Attendance card opens the student's own records.
+  Widget _buildQuickLinks() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Quick Links',
+          style: GoogleFonts.poppins(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFF111827),
+          ),
+        ),
+        const SizedBox(height: 12),
+        GestureDetector(
+          onTap: _openAttendance,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: const Color(0xFF22C55E).withValues(alpha: 0.2),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF22C55E).withValues(alpha: 0.08),
+                  blurRadius: 15,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF22C55E), Color(0xFF4ADE80)],
+                    ),
+                    borderRadius: BorderRadius.all(Radius.circular(14)),
+                  ),
+                  child: const Icon(
+                    Icons.calendar_month_rounded,
+                    color: Colors.white,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Attendance',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1A1A2E),
+                        ),
+                      ),
+                      Text(
+                        'View your attendance records',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  color: Color(0xFF22C55E),
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 

@@ -1,13 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/animations.dart';
+import '../teacher/std_attendance.dart';
+import 'std_report.dart';
+import 'std_photo.dart';
+import 'std_suspension.dart';
 import 'student_details.dart';
 import 'add_student.dart';
 
 class StudentManagement extends StatelessWidget {
   final String? lockedSection;
   final bool readOnly;
-  const StudentManagement({super.key, this.lockedSection, this.readOnly = false});
+  final String teacherId;
+  final String teacherName;
+  const StudentManagement({
+    super.key,
+    this.lockedSection,
+    this.readOnly = false,
+    this.teacherId = '',
+    this.teacherName = '',
+  });
 
   String _prettySection(String? section) {
     if (section == null || section.isEmpty) return '';
@@ -34,7 +46,10 @@ class StudentManagement extends StatelessWidget {
         ),
         title: Text(
           isLocked ? '$sectionLabel Students' : 'Student Management',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.white),
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -59,9 +74,14 @@ class StudentManagement extends StatelessWidget {
                   icon: Icons.person_add_rounded,
                   title: 'Add Student',
                   subtitle: 'Add a new student to the system',
-                  gradient: const LinearGradient(colors: [Color(0xFF43A047), Color(0xFF66BB6A)]),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF43A047), Color(0xFF66BB6A)],
+                  ),
                   onTap: () {
-                    Navigator.push(context, SlidePageRoute(page: const AddStudent()));
+                    Navigator.push(
+                      context,
+                      SlidePageRoute(page: const AddStudent()),
+                    );
                   },
                 ),
               ),
@@ -74,7 +94,9 @@ class StudentManagement extends StatelessWidget {
                 subtitle: isLocked
                     ? 'View $sectionLabel students'
                     : 'View all students by section',
-                gradient: const LinearGradient(colors: [Color(0xFF1565C0), Color(0xFF42A5F5)]),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
+                ),
                 onTap: () {
                   Navigator.push(
                     context,
@@ -88,6 +110,88 @@ class StudentManagement extends StatelessWidget {
                 },
               ),
             ),
+            if (isLocked) const SizedBox(height: 12),
+            if (isLocked)
+              FadeInSlide(
+                index: 1,
+                child: _OptionCard(
+                  icon: Icons.fact_check_rounded,
+                  title: 'Student Attendance',
+                  subtitle: 'Mark Saturday attendance',
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      SlidePageRoute(
+                        page: StdAttendance(
+                          teacherId: teacherId,
+                          teacherName: teacherName,
+                          section: lockedSection!,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            if (!isLocked) const SizedBox(height: 12),
+            if (!isLocked)
+              FadeInSlide(
+                index: 2,
+                child: _OptionCard(
+                  icon: Icons.assignment_rounded,
+                  title: 'Student Attendance Reports',
+                  subtitle: 'Review teacher attendance reports',
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF7B1FA2), Color(0xFFAB47BC)],
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      SlidePageRoute(page: const StdReport()),
+                    );
+                  },
+                ),
+              ),
+            if (!isLocked) const SizedBox(height: 12),
+            if (!isLocked)
+              FadeInSlide(
+                index: 3,
+                child: _OptionCard(
+                  icon: Icons.no_accounts_rounded,
+                  title: 'Student Suspension',
+                  subtitle: 'Suspend or restore student access',
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFD32F2F), Color(0xFFEF5350)],
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      SlidePageRoute(page: const StdSuspension()),
+                    );
+                  },
+                ),
+              ),
+            if (!isLocked) const SizedBox(height: 12),
+            if (!isLocked)
+              FadeInSlide(
+                index: 4,
+                child: _OptionCard(
+                  icon: Icons.add_a_photo_rounded,
+                  title: 'Student Photo',
+                  subtitle: 'Upload student profile photos',
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF00897B), Color(0xFF4DB6AC)],
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      SlidePageRoute(page: const StdPhoto()),
+                    );
+                  },
+                ),
+              ),
           ],
         ),
       ),
@@ -169,7 +273,11 @@ class _OptionCard extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey.shade400, size: 18),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: Colors.grey.shade400,
+              size: 18,
+            ),
           ],
         ),
       ),
