@@ -2,9 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../widgets/profile_card.dart';
-import '../widgets/animations.dart';
-import 'login_screen.dart';
+import '../../widgets/profile_card.dart';
+import '../../widgets/animations.dart';
+import '../login_screen.dart';
 import 'student_management.dart';
 
 class AdminDashboard extends StatefulWidget {

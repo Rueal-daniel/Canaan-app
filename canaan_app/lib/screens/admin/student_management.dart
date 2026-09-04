@@ -1,14 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../widgets/animations.dart';
+import '../../widgets/animations.dart';
 import 'student_details.dart';
 import 'add_student.dart';
 
 class StudentManagement extends StatelessWidget {
-  const StudentManagement({super.key});
+  final String? lockedSection;
+  final bool readOnly;
+  const StudentManagement({super.key, this.lockedSection, this.readOnly = false});
+
+  String _prettySection(String? section) {
+    if (section == null || section.isEmpty) return '';
+    if (section == 'sub-junior') return 'Sub Junior';
+    return section[0].toUpperCase() + section.substring(1);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isLocked = lockedSection != null && lockedSection!.isNotEmpty;
+    final sectionLabel = _prettySection(lockedSection);
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: AppBar(
@@ -23,7 +33,7 @@ class StudentManagement extends StatelessWidget {
           ),
         ),
         title: Text(
-          'Student Management',
+          isLocked ? '$sectionLabel Students' : 'Student Management',
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.white),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
@@ -34,7 +44,7 @@ class StudentManagement extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Student Section',
+              isLocked ? 'My Section' : 'Student Section',
               style: GoogleFonts.poppins(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -42,28 +52,39 @@ class StudentManagement extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            FadeInSlide(
-              index: 0,
-              child: _OptionCard(
-                icon: Icons.person_add_rounded,
-                title: 'Add Student',
-                subtitle: 'Add a new student to the system',
-                gradient: const LinearGradient(colors: [Color(0xFF43A047), Color(0xFF66BB6A)]),
-                onTap: () {
-                  Navigator.push(context, SlidePageRoute(page: const AddStudent()));
-                },
+            if (!isLocked)
+              FadeInSlide(
+                index: 0,
+                child: _OptionCard(
+                  icon: Icons.person_add_rounded,
+                  title: 'Add Student',
+                  subtitle: 'Add a new student to the system',
+                  gradient: const LinearGradient(colors: [Color(0xFF43A047), Color(0xFF66BB6A)]),
+                  onTap: () {
+                    Navigator.push(context, SlidePageRoute(page: const AddStudent()));
+                  },
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
+            if (!isLocked) const SizedBox(height: 12),
             FadeInSlide(
-              index: 1,
+              index: isLocked ? 0 : 1,
               child: _OptionCard(
                 icon: Icons.people_rounded,
                 title: 'Student Details',
-                subtitle: 'View all students by section',
+                subtitle: isLocked
+                    ? 'View $sectionLabel students'
+                    : 'View all students by section',
                 gradient: const LinearGradient(colors: [Color(0xFF1565C0), Color(0xFF42A5F5)]),
                 onTap: () {
-                  Navigator.push(context, SlidePageRoute(page: const StudentDetails()));
+                  Navigator.push(
+                    context,
+                    SlidePageRoute(
+                      page: StudentDetails(
+                        lockedSection: lockedSection,
+                        readOnly: readOnly,
+                      ),
+                    ),
+                  );
                 },
               ),
             ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../widgets/animations.dart';
-import 'login_screen.dart';
+import '../../widgets/animations.dart';
+import '../login_screen.dart';
 
 class StudentDashboard extends StatefulWidget {
   final String fullName;
@@ -93,16 +93,65 @@ class _StudentDashboardState extends State<StudentDashboard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   FadeInSlide(index: 0, child: _welcomeCard()),
-                  const SizedBox(height: 14),
-                  FadeInSlide(index: 1, child: _infoCard('Section', Icons.class_rounded, const Color(0xFF1565C0), 'Your class section')),
-                  const SizedBox(height: 14),
-                  FadeInSlide(index: 2, child: _infoCard('Attendance', Icons.check_circle_rounded, const Color(0xFF43A047), 'Track your attendance')),
-                  const SizedBox(height: 14),
-                  FadeInSlide(index: 3, child: _infoCard('Quizzes', Icons.quiz_rounded, const Color(0xFF7B1FA2), 'View your quizzes')),
-                  const SizedBox(height: 14),
-                  FadeInSlide(index: 4, child: _infoCard('Memory Verse', Icons.menu_book_rounded, const Color(0xFFFFA000), 'Read memory verses')),
-                  const SizedBox(height: 14),
-                  FadeInSlide(index: 5, child: _infoCard('Downloads', Icons.download_rounded, const Color(0xFF00897B), 'Download materials')),
+                  const SizedBox(height: 20),
+                  FadeInSlide(
+                    index: 1,
+                    child: Text('Overview',
+                        style: GoogleFonts.poppins(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF111827))),
+                  ),
+                  const SizedBox(height: 12),
+                  FadeInSlide(
+                    index: 1,
+                    child: _statCard(
+                      title: 'Attendance Rate',
+                      value: '100%',
+                      icon: Icons.check_circle_outline_rounded,
+                      color: const Color(0xFF22C55E),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FadeInSlide(
+                    index: 2,
+                    child: _statCard(
+                      title: 'Memory Verses',
+                      value: '1',
+                      icon: Icons.menu_book_rounded,
+                      color: const Color(0xFF6366F1),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FadeInSlide(
+                    index: 3,
+                    child: _statCard(
+                      title: 'Lesson Plans',
+                      value: '0',
+                      icon: Icons.auto_stories_rounded,
+                      color: const Color(0xFFFF9F0A),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FadeInSlide(
+                    index: 4,
+                    child: _statCard(
+                      title: 'Notifications',
+                      value: '2',
+                      icon: Icons.notifications_outlined,
+                      color: const Color(0xFFA855F7),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FadeInSlide(
+                    index: 5,
+                    child: _statCard(
+                      title: 'Quizzes',
+                      value: '0',
+                      icon: Icons.help_outline_rounded,
+                      color: const Color(0xFF9333EA),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -139,39 +188,84 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  Widget _infoCard(String title, IconData icon, Color color, String subtitle) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
+  Widget _statCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+    VoidCallback? onTap,
+  }) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      elevation: 0,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.08), blurRadius: 15, offset: const Offset(0, 4))],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [color, color.withValues(alpha: 0.7)]),
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
-            ),
-            child: Icon(icon, color: Colors.white, size: 26),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFF1F5F9)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w600, color: const Color(0xFF1A1A2E))),
-                const SizedBox(height: 2),
-                Text(subtitle, style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade500)),
-              ],
-            ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF6B7280),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    value,
+                    style: GoogleFonts.poppins(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF111827),
+                      height: 1.0,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [color, color.withValues(alpha: 0.82)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.35),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Icon(icon, color: Colors.white, size: 27),
+              ),
+            ],
           ),
-          Icon(Icons.arrow_forward_ios_rounded, color: color.withValues(alpha: 0.5), size: 18),
-        ],
+        ),
       ),
     );
   }

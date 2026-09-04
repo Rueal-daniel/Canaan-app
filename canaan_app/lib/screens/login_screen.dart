@@ -3,9 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/animations.dart';
-import 'admin_dashboard.dart';
-import 'teacher_dashboard.dart';
-import 'student_dashboard.dart';
+import 'admin/admin_dashboard.dart';
+import 'teacher/teacher_dashboard.dart';
+import 'student/student_dashboard.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -63,7 +63,11 @@ class _LoginScreenState extends State<LoginScreen> {
             dashboard = AdminDashboard(fullName: user['full_name'] ?? user['username']);
             break;
           case UserRole.teacher:
-            dashboard = TeacherDashboard(fullName: user['full_name'] ?? user['username']);
+            dashboard = TeacherDashboard(
+              fullName: user['full_name'] ?? user['username'],
+              username: user['username'],
+              section: user['section'],
+            );
             break;
           case UserRole.student:
             dashboard = StudentDashboard(

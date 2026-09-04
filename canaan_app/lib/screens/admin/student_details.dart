@@ -4,7 +4,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'edit_student.dart';
 
 class StudentDetails extends StatefulWidget {
-  const StudentDetails({super.key});
+  final String? lockedSection;
+  final bool readOnly;
+  const StudentDetails({super.key, this.lockedSection, this.readOnly = false});
 
   @override
   State<StudentDetails> createState() => _StudentDetailsState();
@@ -22,7 +24,13 @@ class _StudentDetailsState extends State<StudentDetails> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    // If locked to a single section, we only need 1 tab slot.
+    _tabController = TabController(
+      length: widget.lockedSection != null ? 1 : 3,
+      vsync: this,
+    );
+    // Pre-select the locked section tab index for the full 3-tab mode
+    // (handled in build when lockedSection == null).
     _fetchStudents();
   }
 
@@ -208,27 +216,32 @@ class _StudentDetailsState extends State<StudentDetails> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
+    final isLocked = widget.lockedSection != null && widget.lockedSection!.isNotEmpty;
+    final lockedLabel = _prettySection(widget.lockedSection);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1565C0),
         title: Text(
-          'Student Details',
+          isLocked ? '$lockedLabel Students' : 'Student Details',
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.white),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
-          tabs: const [
-            Tab(text: 'Sub Junior'),
-            Tab(text: 'Junior'),
-            Tab(text: 'Senior'),
-          ],
-        ),
+        bottom: isLocked
+            ? null
+            : TabBar(
+                controller: _tabController,
+                indicatorColor: Colors.white,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white70,
+                labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
+                tabs: const [
+                  Tab(text: 'Sub Junior'),
+                  Tab(text: 'Junior'),
+                  Tab(text: 'Senior'),
+                ],
+              ),
       ),
       body: Column(
         children: [
@@ -239,7 +252,7 @@ class _StudentDetailsState extends State<StudentDetails> with SingleTickerProvid
               onChanged: (v) => setState(() => _searchQuery = v),
               style: GoogleFonts.poppins(fontSize: 14),
               decoration: InputDecoration(
-                hintText: 'Search students...',
+                hintText: isLocked ? 'Search $lockedLabel students...' : 'Search students...',
                 hintStyle: GoogleFonts.poppins(color: Colors.grey.shade400, fontSize: 14),
                 prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF1565C0)),
                 suffixIcon: _searchQuery.isNotEmpty
@@ -272,18 +285,26 @@ class _StudentDetailsState extends State<StudentDetails> with SingleTickerProvid
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator(color: Color(0xFF1565C0)))
-                : TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildStudentList(_filterBySection('sub-junior')),
-                      _buildStudentList(_filterBySection('junior')),
-                      _buildStudentList(_filterBySection('senior')),
-                    ],
-                  ),
+                : isLocked
+                    ? _buildStudentList(_filterBySection(widget.lockedSection!))
+                    : TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildStudentList(_filterBySection('sub-junior')),
+                          _buildStudentList(_filterBySection('junior')),
+                          _buildStudentList(_filterBySection('senior')),
+                        ],
+                      ),
           ),
         ],
       ),
     );
+  }
+
+  String _prettySection(String? section) {
+    if (section == null || section.isEmpty) return '';
+    if (section == 'sub-junior') return 'Sub Junior';
+    return section[0].toUpperCase() + section.substring(1);
   }
 
   Widget _buildStudentList(List<Map<String, dynamic>> students) {
@@ -363,22 +384,24 @@ class _StudentDetailsState extends State<StudentDetails> with SingleTickerProvid
                 tooltip: 'View Details',
                 onPressed: () => _showStudentDetails(s),
               ),
-              IconButton(
-                icon: const Icon(Icons.edit_rounded, color: Color(0xFF1565C0), size: 20),
-                tooltip: 'Edit',
-                onPressed: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => EditStudent(student: s)),
-                  );
-                  _fetchStudents();
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_rounded, color: Colors.red, size: 20),
-                tooltip: 'Delete',
-                onPressed: () => _deleteStudent(s),
-              ),
+              if (!widget.readOnly) ...[
+                IconButton(
+                  icon: const Icon(Icons.edit_rounded, color: Color(0xFF1565C0), size: 20),
+                  tooltip: 'Edit',
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => EditStudent(student: s)),
+                    );
+                    _fetchStudents();
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_rounded, color: Colors.red, size: 20),
+                  tooltip: 'Delete',
+                  onPressed: () => _deleteStudent(s),
+                ),
+              ],
             ],
           ),
         );
