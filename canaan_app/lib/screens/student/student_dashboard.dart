@@ -2,16 +2,24 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../widgets/animations.dart';
 import '../../services/auth_service.dart';
 import '../../services/session_service.dart';
 import '../login_screen.dart';
+import 'memory_verse.dart';
 import 'my_attendance.dart';
 
 class StudentDashboard extends StatefulWidget {
   final String fullName;
   final String? photoUrl;
-  const StudentDashboard({super.key, required this.fullName, this.photoUrl});
+  final String? section;
+  const StudentDashboard({
+    super.key,
+    required this.fullName,
+    this.photoUrl,
+    this.section,
+  });
 
   @override
   State<StudentDashboard> createState() => _StudentDashboardState();
@@ -19,6 +27,7 @@ class StudentDashboard extends StatefulWidget {
 
 class _StudentDashboardState extends State<StudentDashboard> {
   Timer? _suspensionTimer;
+  int _memoryVerseCount = 0;
 
   @override
   void initState() {
@@ -30,6 +39,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
       const Duration(seconds: 60),
       (_) => _guardSuspension(),
     );
+    _loadVerseCount();
   }
 
   @override
@@ -65,6 +75,37 @@ class _StudentDashboardState extends State<StudentDashboard> {
       context,
       SlidePageRoute(page: MyAttendance(fullName: widget.fullName)),
     );
+  }
+
+  void _openMemoryVerse() {
+    final section = widget.section;
+    if (section == null || section.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No section assigned yet', style: GoogleFonts.poppins()),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      SlidePageRoute(page: StudentMemoryVerse(section: section)),
+    );
+  }
+
+  Future<void> _loadVerseCount() async {
+    final section = widget.section;
+    if (section == null || section.isEmpty) return;
+    try {
+      final rows = await Supabase.instance.client
+          .from('memory_verses')
+          .select('id')
+          .eq('section', section);
+      if (mounted) setState(() => _memoryVerseCount = rows.length);
+    } catch (_) {}
   }
 
   String _getInitials(String name) {
@@ -113,7 +154,13 @@ class _StudentDashboardState extends State<StudentDashboard> {
                                 'https://pjytoxyddfrsrkzappbb.supabase.co/storage/v1/object/public/student-photos/${widget.photoUrl}',
                               )
                             : null,
-                        onBackgroundImageError: (_, _) {},
+                        // Handler only when an image exists: Flutter asserts
+                        // backgroundImage != null whenever this is set.
+                        onBackgroundImageError:
+                            widget.photoUrl != null &&
+                                widget.photoUrl!.isNotEmpty
+                            ? (_, _) {}
+                            : null,
                         child:
                             widget.photoUrl == null || widget.photoUrl!.isEmpty
                             ? Text(
@@ -210,9 +257,10 @@ class _StudentDashboardState extends State<StudentDashboard> {
                     index: 2,
                     child: _statCard(
                       title: 'Memory Verses',
-                      value: '1',
+                      value: '$_memoryVerseCount',
                       icon: Icons.menu_book_rounded,
                       color: const Color(0xFF6366F1),
+                      onTap: _openMemoryVerse,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -374,6 +422,74 @@ class _StudentDashboardState extends State<StudentDashboard> {
                 const Icon(
                   Icons.arrow_forward_ios_rounded,
                   color: Color(0xFF22C55E),
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        GestureDetector(
+          onTap: _openMemoryVerse,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.08),
+                  blurRadius: 15,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                    ),
+                    borderRadius: BorderRadius.all(Radius.circular(14)),
+                  ),
+                  child: const Icon(
+                    Icons.menu_book_rounded,
+                    color: Colors.white,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Memory Verse',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1A1A2E),
+                        ),
+                      ),
+                      Text(
+                        'View your section memory verses',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  color: Color(0xFF6366F1),
                   size: 18,
                 ),
               ],

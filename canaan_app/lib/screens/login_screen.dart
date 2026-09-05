@@ -166,6 +166,7 @@ class _LoginScreenState extends State<LoginScreen> {
             dashboard = StudentDashboard(
               fullName: user['full_name'] ?? user['username'],
               photoUrl: user['photo_url'],
+              section: user['section'],
             );
             break;
         }

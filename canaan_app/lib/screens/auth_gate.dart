@@ -57,12 +57,13 @@ class _AuthGateState extends State<AuthGate> {
             section: user['section'],
           );
           break;
-        case UserRole.student:
-          dashboard = StudentDashboard(
-            fullName: user['full_name'] ?? user['username'] ?? 'Student',
-            photoUrl: user['photo_url'],
-          );
-          break;
+      case UserRole.student:
+        dashboard = StudentDashboard(
+          fullName: user['full_name'] ?? user['username'] ?? 'Student',
+          photoUrl: user['photo_url'],
+          section: user['section'],
+        );
+        break;
       }
 
       if (!mounted) return;

@@ -5,6 +5,7 @@ import '../../widgets/animations.dart';
 import '../../services/auth_service.dart';
 import '../login_screen.dart';
 import '../admin/student_management.dart';
+import 'memory_verse.dart';
 
 class TeacherDashboard extends StatefulWidget {
   final String fullName;
@@ -97,7 +98,12 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
       int lessonCount = _lessonPlanCount;
       int notifCount = _notificationCount;
       try {
-        final mv = await _client.from('memory_verses').select('id');
+        final mv = section == null || section.isEmpty
+            ? await _client.from('memory_verses').select('id')
+            : await _client
+                .from('memory_verses')
+                .select('id')
+                .eq('section', section);
         memoryCount = mv.length;
       } catch (_) {}
       try {
@@ -146,6 +152,30 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
           readOnly: true,
           teacherId: _teacherId ?? '',
           teacherName: _teacherName ?? widget.fullName,
+        ),
+      ),
+    );
+  }
+
+  void _openMemoryVerse() {
+    if (_teacherSection == null || _teacherSection!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No section assigned yet', style: GoogleFonts.poppins()),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      SlidePageRoute(
+        page: TeacherMemoryVerse(
+          teacherId: _teacherId ?? '',
+          teacherName: _teacherName ?? widget.fullName,
+          section: _teacherSection!,
         ),
       ),
     );
@@ -260,6 +290,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                             value: '$_memoryVerseCount',
                             icon: Icons.menu_book_outlined,
                             color: const Color(0xFF22C55E),
+                            onTap: _openMemoryVerse,
                           ),
                         ),
                         const SizedBox(height: 12),

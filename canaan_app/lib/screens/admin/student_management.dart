@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/animations.dart';
+import '../teacher/memory_verse.dart';
 import '../teacher/std_attendance.dart';
 import 'std_report.dart';
+import 'memory_verse_report.dart';
 import 'std_photo.dart';
 import 'std_suspension.dart';
 import 'student_details.dart';
@@ -135,6 +137,31 @@ class StudentManagement extends StatelessWidget {
                   },
                 ),
               ),
+            if (isLocked) const SizedBox(height: 12),
+            if (isLocked)
+              FadeInSlide(
+                index: 2,
+                child: _OptionCard(
+                  icon: Icons.menu_book_rounded,
+                  title: 'Memory Verse',
+                  subtitle: 'Add verses for $sectionLabel',
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF22C55E), Color(0xFF4ADE80)],
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      SlidePageRoute(
+                        page: TeacherMemoryVerse(
+                          teacherId: teacherId,
+                          teacherName: teacherName,
+                          section: lockedSection!,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
             if (!isLocked) const SizedBox(height: 12),
             if (!isLocked)
               FadeInSlide(
@@ -188,6 +215,48 @@ class StudentManagement extends StatelessWidget {
                     Navigator.push(
                       context,
                       SlidePageRoute(page: const StdPhoto()),
+                    );
+                  },
+                ),
+              ),
+            if (!isLocked) const SizedBox(height: 12),
+            if (!isLocked)
+              FadeInSlide(
+                index: 5,
+                child: _OptionCard(
+                  icon: Icons.menu_book_rounded,
+                  title: 'Memory Verses',
+                  subtitle: 'View all section memory verses',
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF22C55E), Color(0xFF4ADE80)],
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      SlidePageRoute(
+                        page: const TeacherMemoryVerse(isAdmin: true),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            if (!isLocked) const SizedBox(height: 12),
+            if (!isLocked)
+              FadeInSlide(
+                index: 6,
+                child: _OptionCard(
+                  icon: Icons.fact_check_rounded,
+                  title: 'Memory Verse Reports',
+                  subtitle: 'Review recitation reports',
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF7B1FA2), Color(0xFFAB47BC)],
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      SlidePageRoute(
+                        page: const MemoryVerseReports(),
+                      ),
                     );
                   },
                 ),
