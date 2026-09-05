@@ -12,7 +12,11 @@ class LoginScreen extends StatefulWidget {
   /// When true, shows the "Account Suspended" notice on open
   /// (used after a suspended session is blocked).
   final bool suspendedNotice;
-  const LoginScreen({super.key, this.suspendedNotice = false});
+  final String suspendedRole;
+  const LoginScreen(
+      {super.key,
+      this.suspendedNotice = false,
+      this.suspendedRole = 'student'});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -41,12 +45,18 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     if (widget.suspendedNotice) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _showSuspendedDialog();
+        if (mounted) {
+          _showSuspendedDialog(
+              isTeacher: widget.suspendedRole == 'teacher');
+        }
       });
     }
   }
 
-  void _showSuspendedDialog() {
+  void _showSuspendedDialog({required bool isTeacher}) {
+    final message = isTeacher
+        ? 'You have been suspended by Teacher'
+        : 'You have been suspended by the Admin. You cannot access the Student Dashboard at this time. Please contact the Admin for more information.';
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -78,7 +88,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'You have been suspended by the Admin. You cannot access the Student Dashboard at this time. Please contact the Admin for more information.',
+              message,
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
                 fontSize: 13.5,
@@ -177,9 +187,9 @@ class _LoginScreenState extends State<LoginScreen> {
           _errorMessage = 'Invalid username or password';
         });
       }
-    } on AccountSuspendedException {
+    } on AccountSuspendedException catch (e) {
       if (!mounted) return;
-      _showSuspendedDialog();
+      _showSuspendedDialog(isTeacher: e.role == UserRole.teacher);
     } catch (e) {
       setState(() {
         _errorMessage = 'Connection error. Please try again.';

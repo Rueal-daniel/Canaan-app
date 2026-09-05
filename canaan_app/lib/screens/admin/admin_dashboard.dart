@@ -1,12 +1,11 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../widgets/profile_card.dart';
 import '../../widgets/animations.dart';
-import '../../services/auth_service.dart';
-import '../login_screen.dart';
+import '../../widgets/dashboard_design.dart';
 import 'student_management.dart';
+import 'teacher_management.dart';
+import 'management_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
   final String fullName;
@@ -81,456 +80,351 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
+  String _splitSubtitle(Map<String, int> sections) {
+    final sub = sections['sub-junior'] ?? 0;
+    final jun = sections['junior'] ?? 0;
+    final sen = sections['senior'] ?? 0;
+    return '$sub Sub · $jun Jun · $sen Sen';
+  }
+
   @override
   Widget build(BuildContext context) {
     final total = _adminCount + _teacherCount + _studentCount;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4F8),
-      appBar: AppBar(
-        elevation: 0,
-        centerTitle: false,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF0D47A1), Color(0xFF1976D2), Color(0xFF42A5F5)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+      backgroundColor: DashColors.bg,
+      body: RefreshIndicator(
+        onRefresh: _fetchAll,
+        color: const Color(0xFF1565C0),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverAppBar(
+              expandedHeight: 250,
+              floating: false,
+              pinned: true,
+              elevation: 0,
+              flexibleSpace: FlexibleSpaceBar(
+                background: DashboardHero(
+                  gradient: DashColors.adminGradient,
+                  greeting:
+                      '${dashGreeting()}, Admin',
+                  name: widget.fullName,
+                  roleLabel: 'Canaan Administrator',
+                ),
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.logout_rounded),
+                  color: Colors.white,
+                  tooltip: 'Log out',
+                  onPressed: () => confirmLogout(context),
+                ),
+              ],
             ),
-          ),
+            SliverToBoxAdapter(
+              child: _isLoading
+                  ? const Padding(
+                      padding: EdgeInsets.only(top: 90),
+                      child: Center(
+                          child: CircularProgressIndicator(
+                              color: Color(0xFF1565C0))),
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          FadeInSlide(
+                              index: 0,
+                              child: DashSectionHeading('Overview',
+                                  trailing: dashTodayLabel())),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 1,
+                            child: GridView.count(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              crossAxisCount: 2,
+                              mainAxisSpacing: 12,
+                              crossAxisSpacing: 12,
+                              mainAxisExtent: 158,
+                              children: [
+                                DashStat(
+                                  label: 'Total Users',
+                                  value: '$total',
+                                  subtitle:
+                                      '$_adminCount admin · $_teacherCount teachers',
+                                  icon: Icons.groups_rounded,
+                                  color: const Color(0xFF1565C0),
+                                ),
+                                DashStat(
+                                  label: 'Teachers',
+                                  value: '$_teacherCount',
+                                  subtitle:
+                                      _splitSubtitle(_teacherSections),
+                                  icon: Icons.co_present_rounded,
+                                  color: const Color(0xFFF59E0B),
+                                  onTap: () => Navigator.push(
+                                      context,
+                                      SlidePageRoute(
+                                          page: const TeacherManagement())),
+                                ),
+                                DashStat(
+                                  label: 'Students',
+                                  value: '$_studentCount',
+                                  subtitle:
+                                      _splitSubtitle(_studentSections),
+                                  icon: Icons.school_rounded,
+                                  color: const Color(0xFF22C55E),
+                                  onTap: () => Navigator.push(
+                                      context,
+                                      SlidePageRoute(
+                                          page: const StudentManagement())),
+                                ),
+                                DashStat(
+                                  label: 'Attendance Reports',
+                                  value: '$_attendanceCount',
+                                  subtitle: 'Submitted by teachers',
+                                  icon: Icons.assessment_rounded,
+                                  color: const Color(0xFF7B1FA2),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          FadeInSlide(
+                              index: 2,
+                              child: const DashSectionHeading('By Section')),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 3,
+                            child: _SectionBreakdownCard(
+                              title: 'Teachers',
+                              icon: Icons.co_present_rounded,
+                              color: const Color(0xFFF59E0B),
+                              sections: _teacherSections,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 4,
+                            child: _SectionBreakdownCard(
+                              title: 'Students',
+                              icon: Icons.school_rounded,
+                              color: const Color(0xFF22C55E),
+                              sections: _studentSections,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          FadeInSlide(
+                              index: 5,
+                              child: const DashSectionHeading('Quick Links')),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 6,
+                            child: DashQuickLink(
+                              icon: Icons.school_rounded,
+                              title: 'Students',
+                              subtitle: 'Manage students · $_studentCount total',
+                              color: const Color(0xFF22C55E),
+                              colorEnd: const Color(0xFF4ADE80),
+                              onTap: () => Navigator.push(
+                                  context,
+                                  SlidePageRoute(
+                                      page: const StudentManagement())),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 7,
+                            child: DashQuickLink(
+                              icon: Icons.co_present_rounded,
+                              title: 'Teachers',
+                              subtitle: 'Manage teachers · $_teacherCount total',
+                              color: const Color(0xFFF59E0B),
+                              colorEnd: const Color(0xFFFFB74D),
+                              onTap: () => Navigator.push(
+                                  context,
+                                  SlidePageRoute(
+                                      page: const TeacherManagement())),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 8,
+                            child: DashQuickLink(
+                              icon: Icons.settings_rounded,
+                              title: '⚙️ Management',
+                              subtitle: 'Lesson plans & more',
+                              color: const Color(0xFF7B1FA2),
+                              colorEnd: const Color(0xFFAB47BC),
+                              onTap: () => Navigator.push(
+                                  context,
+                                  SlidePageRoute(
+                                      page: ManagementScreen(
+                                          adminName: widget.fullName))),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
         ),
-        title: Text(
-          'Admin Dashboard',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.white),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            color: Colors.white,
-            onPressed: () async {
-              await AuthService().logout();
-              if (!context.mounted) return;
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-                (_) => false,
-              );
-            },
+      ),
+    );
+  }
+}
+
+/// White card breaking a population down by Sub Junior / Junior / Senior
+/// with slim horizontal progress bars.
+class _SectionBreakdownCard extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Color color;
+  final Map<String, int> sections;
+  const _SectionBreakdownCard({
+    required this.title,
+    required this.icon,
+    required this.color,
+    required this.sections,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final sub = sections['sub-junior'] ?? 0;
+    final jun = sections['junior'] ?? 0;
+    final sen = sections['senior'] ?? 0;
+    final maxVal = [sub, jun, sen].fold(1, (a, b) => a > b ? a : b);
+    final total = sub + jun + sen;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: DashColors.cardBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF1565C0)))
-          : RefreshIndicator(
-              onRefresh: _fetchAll,
-              color: const Color(0xFF1565C0),
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: Column(
-                  children: [
-                    ProfileCard(fullName: widget.fullName, roleBadge: 'Canaan Administrator'),
-                    const SizedBox(height: 6),
-                    _buildTotalUsersCard(total),
-                    _buildTeachersCard(),
-                    _buildStudentsCard(),
-                    _buildAttendanceCard(),
-                    const SizedBox(height: 12),
-                    _buildQuickLinks(context),
-                    const SizedBox(height: 24),
-                  ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(13),
                 ),
+                child: Icon(icon, color: color, size: 22),
               ),
-            ),
-    );
-  }
-
-  Widget _buildTotalUsersCard(int total) {
-    final teacherPct = total > 0 ? _teacherCount / total : 0.0;
-    final studentPct = total > 0 ? _studentCount / total : 0.0;
-    final adminPct = total > 0 ? _adminCount / total : 0.0;
-
-    return FadeInSlide(
-      index: 1,
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-        padding: const EdgeInsets.all(22),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(color: const Color(0xFF1565C0).withValues(alpha: 0.08), blurRadius: 20, offset: const Offset(0, 8)),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Total Users', style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey.shade500)),
-                      const SizedBox(height: 4),
-                      AnimatedCounter(
-                        target: total,
-                        style: GoogleFonts.poppins(fontSize: 38, fontWeight: FontWeight.bold, color: const Color(0xFF0D47A1)),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Color(0xFF1565C0), Color(0xFF42A5F5)]),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [BoxShadow(color: const Color(0xFF1565C0).withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
-                  ),
-                  child: const Icon(Icons.groups_rounded, color: Colors.white, size: 28),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: SizedBox(
-                height: 10,
-                child: Row(
-                  children: [
-                    if (adminPct > 0)
-                      Expanded(flex: (adminPct * 1000).toInt(), child: Container(color: const Color(0xFF7B1FA2))),
-                    if (teacherPct > 0)
-                      Expanded(flex: (teacherPct * 1000).toInt(), child: Container(color: const Color(0xFFFFA000))),
-                    if (studentPct > 0)
-                      Expanded(flex: (studentPct * 1000).toInt(), child: Container(color: const Color(0xFF43A047))),
-                  ],
-                ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text('$title by Section',
+                    style: GoogleFonts.poppins(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w700,
+                        color: DashColors.ink)),
               ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _LegendItem2('$_adminCount admin', const Color(0xFF7B1FA2)),
-                _LegendItem2('$_teacherCount teachers', const Color(0xFFFFA000)),
-                _LegendItem2('$_studentCount students', const Color(0xFF43A047)),
-              ],
-            ),
-          ],
-        ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text('$total',
+                    style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: color)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _SectionBarRow(
+              label: 'Sub Junior', count: sub, max: maxVal, color: color),
+          const SizedBox(height: 10),
+          _SectionBarRow(
+              label: 'Junior', count: jun, max: maxVal, color: color),
+          const SizedBox(height: 10),
+          _SectionBarRow(
+              label: 'Senior', count: sen, max: maxVal, color: color),
+        ],
       ),
     );
   }
+}
 
-  Widget _buildTeachersCard() {
-    final subJr = _teacherSections['sub-junior'] ?? 0;
-    final jr = _teacherSections['junior'] ?? 0;
-    final sr = _teacherSections['senior'] ?? 0;
-    final maxVal = [subJr, jr, sr].fold(0, (a, b) => a > b ? a : b);
+class _SectionBarRow extends StatelessWidget {
+  final String label;
+  final int count;
+  final int max;
+  final Color color;
+  const _SectionBarRow({
+    required this.label,
+    required this.count,
+    required this.max,
+    required this.color,
+  });
 
-    return FadeInSlide(
-      index: 2,
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-        padding: const EdgeInsets.all(22),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFFFA000), Color(0xFFFFB74D)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: const Color(0xFFFFA000).withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 8))],
+  @override
+  Widget build(BuildContext context) {
+    final frac = max > 0 ? count / max : 0.0;
+    return Row(
+      children: [
+        SizedBox(
+          width: 82,
+          child: Text(label,
+              style: GoogleFonts.poppins(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  color: DashColors.muted)),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Teachers', style: GoogleFonts.poppins(fontSize: 14, color: Colors.white.withValues(alpha: 0.85))),
-                      const SizedBox(height: 4),
-                      AnimatedCounter(
-                        target: _teacherCount,
-                        style: GoogleFonts.poppins(fontSize: 38, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(Icons.school_rounded, color: Colors.white, size: 28),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _BarChart(
-              values: [
-                _BarData(subJr, '$subJr', Colors.white),
-                _BarData(jr, '$jr', Colors.white),
-                _BarData(sr, '$sr', Colors.white),
-              ],
-              maxValue: maxVal,
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                _LegendItem2('Sub', Colors.white.withValues(alpha: 0.8)),
-                _LegendItem2('Jun', Colors.white.withValues(alpha: 0.8)),
-                _LegendItem2('Sen', Colors.white.withValues(alpha: 0.8)),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStudentsCard() {
-    final subJr = _studentSections['sub-junior'] ?? 0;
-    final jr = _studentSections['junior'] ?? 0;
-    final sr = _studentSections['senior'] ?? 0;
-    final maxVal = [subJr, jr, sr].fold(0, (a, b) => a > b ? a : b);
-
-    return FadeInSlide(
-      index: 3,
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-        padding: const EdgeInsets.all(22),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF43A047), Color(0xFF66BB6A)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: const Color(0xFF43A047).withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 8))],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Students', style: GoogleFonts.poppins(fontSize: 14, color: Colors.white.withValues(alpha: 0.85))),
-                      const SizedBox(height: 4),
-                      AnimatedCounter(
-                        target: _studentCount,
-                        style: GoogleFonts.poppins(fontSize: 38, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(Icons.groups_rounded, color: Colors.white, size: 28),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _BarChart(
-              values: [
-                _BarData(subJr, '$subJr', Colors.white),
-                _BarData(jr, '$jr', Colors.white),
-                _BarData(sr, '$sr', Colors.white),
-              ],
-              maxValue: maxVal,
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                _LegendItem2('Sub', Colors.white.withValues(alpha: 0.8)),
-                _LegendItem2('Jun', Colors.white.withValues(alpha: 0.8)),
-                _LegendItem2('Sen', Colors.white.withValues(alpha: 0.8)),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAttendanceCard() {
-    return FadeInSlide(
-      index: 4,
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-        padding: const EdgeInsets.all(22),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF7B1FA2), Color(0xFFAB47BC)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: const Color(0xFF7B1FA2).withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 8))],
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              height: 9,
+              child: Stack(
                 children: [
-                  Text('Attendance Reports', style: GoogleFonts.poppins(fontSize: 14, color: Colors.white.withValues(alpha: 0.85))),
-                  const SizedBox(height: 4),
-                  AnimatedCounter(
-                    target: _attendanceCount,
-                    style: GoogleFonts.poppins(fontSize: 38, fontWeight: FontWeight.bold, color: Colors.white),
+                  Container(color: color.withValues(alpha: 0.14)),
+                  FractionallySizedBox(
+                    widthFactor: frac.clamp(0.04, 1.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                            colors: [color, color.withValues(alpha: 0.7)]),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.25),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(Icons.assessment_rounded, color: Colors.white, size: 28),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickLinks(BuildContext context) {
-    return FadeInSlide(
-      index: 5,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Quick Links',
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFF0D47A1),
-              ),
-            ),
-            const SizedBox(height: 14),
-            GestureDetector(
-              onTap: () {
-                Navigator.push(context, SlidePageRoute(page: const StudentManagement()));
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: const Color(0xFF43A047).withValues(alpha: 0.2)),
-                  boxShadow: [BoxShadow(color: const Color(0xFF43A047).withValues(alpha: 0.08), blurRadius: 15, offset: const Offset(0, 4))],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(colors: [Color(0xFF43A047), Color(0xFF66BB6A)]),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(Icons.school_rounded, color: Colors.white, size: 26),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Students', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: const Color(0xFF1A1A2E))),
-                          Text('Manage Students', style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey.shade500)),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF43A047), size: 18),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LegendItem2 extends StatelessWidget {
-  final String text;
-  final Color color;
-  const _LegendItem2(this.text, this.color);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 14),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
-          const SizedBox(width: 5),
-          Text(text, style: GoogleFonts.poppins(fontSize: 11, color: color)),
-        ],
-      ),
-    );
-  }
-}
-
-class _BarData {
-  final int value;
-  final String label;
-  final Color color;
-  const _BarData(this.value, this.label, this.color);
-}
-
-class _BarChart extends StatelessWidget {
-  final List<_BarData> values;
-  final int maxValue;
-  const _BarChart({required this.values, required this.maxValue});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: values.map((bar) {
-        final height = maxValue > 0 ? (bar.value / maxValue) * 55.0 : 0.0;
-        return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Column(
-              children: [
-                Text(bar.label, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
-                const SizedBox(height: 4),
-                Container(
-                  height: height.clamp(4.0, 55.0),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ),
-              ],
-            ),
           ),
-        );
-      }).toList(),
+        ),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 30,
+          child: Text('$count',
+              textAlign: TextAlign.right,
+              style: GoogleFonts.poppins(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: DashColors.ink)),
+        ),
+      ],
     );
   }
 }

@@ -88,6 +88,13 @@ class _StdAttendanceState extends State<StdAttendance> {
 
   String _norm(String? v) => (v ?? '').trim().toLowerCase();
 
+  /// One-time attendance: locked once today's report is saved,
+  /// unless Admin rejected it (correction + resubmission allowed).
+  bool get _attendanceLocked =>
+      _existingReportId != null &&
+      _reportStatus.isNotEmpty &&
+      _reportStatus != AttendanceReportService.rejected;
+
   /// Section table holding one row per student per date.
   String? _sectionTable(String section) {
     switch (section) {
@@ -260,6 +267,11 @@ class _StdAttendanceState extends State<StdAttendance> {
       return;
     }
     if (_students.isEmpty) return;
+    // One-time rule: already saved today → thank-you popup, no re-save.
+    if (_attendanceLocked) {
+      _showAlreadyDonePopup();
+      return;
+    }
 
     setState(() => _isSaving = true);
     try {
@@ -367,6 +379,62 @@ class _StdAttendanceState extends State<StdAttendance> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  void _showAlreadyDonePopup() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                    colors: [Color(0xFF22C55E), Color(0xFF4ADE80)]),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check_rounded,
+                  color: Colors.white, size: 36),
+            ),
+            const SizedBox(height: 16),
+            Text('Already Done',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF111827))),
+            const SizedBox(height: 8),
+            Text(
+              'You have already done the attendance of students. Thank you!',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                  fontSize: 13.5, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF22C55E),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+                child: Text('OK',
+                    style: GoogleFonts.poppins(
+                        fontSize: 15, fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _snack(String message, Color color) {
@@ -974,11 +1042,11 @@ class _StdAttendanceState extends State<StdAttendance> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Expanded(child: _statusOption(id, 'present', 'Present', const Color(0xFF22C55E), current)),
+                  Expanded(child: _statusOption(id, 'present', 'Present', const Color(0xFF22C55E), current, enabled: !_attendanceLocked)),
                   const SizedBox(width: 8),
-                  Expanded(child: _statusOption(id, 'absent', 'Absent', const Color(0xFFEF4444), current)),
+                  Expanded(child: _statusOption(id, 'absent', 'Absent', const Color(0xFFEF4444), current, enabled: !_attendanceLocked)),
                   const SizedBox(width: 8),
-                  Expanded(child: _statusOption(id, 'late', 'Late', const Color(0xFFF59E0B), current)),
+                  Expanded(child: _statusOption(id, 'late', 'Late', const Color(0xFFF59E0B), current, enabled: !_attendanceLocked)),
                 ],
               ),
             ],
@@ -988,29 +1056,55 @@ class _StdAttendanceState extends State<StdAttendance> {
     );
   }
 
-  Widget _statusOption(String studentId, String value, String label, Color color, String current) {
+  Widget _statusOption(String studentId, String value, String label, Color color, String current, {bool enabled = true}) {
     final selected = current == value;
+    final shownColor = enabled ? color : Colors.grey.shade400;
     return GestureDetector(
-      onTap: () => setState(() => _statuses[studentId] = value),
+      onTap: enabled ? () => setState(() => _statuses[studentId] = value) : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(vertical: 9),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: selected ? color : color.withValues(alpha: 0.1),
+          color: selected ? shownColor : shownColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
-          boxShadow: selected
+          boxShadow: selected && enabled
               ? [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 8, offset: const Offset(0, 3))]
               : null,
         ),
         child: Text(label,
             style: GoogleFonts.poppins(
-                fontSize: 12.5, fontWeight: FontWeight.w700, color: selected ? Colors.white : color)),
+                fontSize: 12.5, fontWeight: FontWeight.w700, color: selected ? Colors.white : shownColor)),
       ),
     );
   }
 
   Widget _saveButton() {
+    // Locked: greyed button that explains itself via popup on tap.
+    if (_attendanceLocked) {
+      return SizedBox(
+        width: double.infinity,
+        height: 56,
+        child: ElevatedButton(
+          onPressed: _showAlreadyDonePopup,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.grey.shade400,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            elevation: 0,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.lock_outline_rounded, size: 20),
+              const SizedBox(width: 8),
+              Text('Attendance Done',
+                  style: GoogleFonts.poppins(fontSize: 17, fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+      );
+    }
     return SizedBox(
       width: double.infinity,
       height: 56,

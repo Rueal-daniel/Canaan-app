@@ -68,17 +68,18 @@ class _AuthGateState extends State<AuthGate> {
 
       if (!mounted) return;
       Navigator.pushReplacement(context, SlidePageRoute(page: dashboard));
-    } on AccountSuspendedException {
-      // A previously logged-in student was suspended: session already
-      // cleared — land on Login with the suspension notice.
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const LoginScreen(suspendedNotice: true),
-        ),
-      );
-    }
+  } on AccountSuspendedException catch (e) {
+    // A previously logged-in account was suspended: session already
+    // cleared — land on Login with the suspension notice.
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+          builder: (_) => LoginScreen(
+              suspendedNotice: true,
+              suspendedRole: e.role?.name ?? 'student')),
+    );
+  }
   }
 
   @override

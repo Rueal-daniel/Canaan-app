@@ -1,11 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../widgets/animations.dart';
+import '../../widgets/dashboard_design.dart';
 import '../../services/auth_service.dart';
-import '../login_screen.dart';
+import '../../services/notice_service.dart';
+import '../../services/session_service.dart';
 import '../admin/student_management.dart';
+import '../login_screen.dart';
+import 'download_center.dart';
+import 'lesson_plan.dart';
+import 'notice_board.dart';
 import 'memory_verse.dart';
+import 'my_attendance.dart';
 
 class TeacherDashboard extends StatefulWidget {
   final String fullName;
@@ -29,16 +38,53 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
   String? _teacherId;
   String? _teacherName;
   int _myStudentCount = 0;
-  int _memoryVerseCount = 1;
+  int _memoryVerseCount = 0;
   int _lessonPlanCount = 0;
-  int _notificationCount = 4;
+  int _notificationCount = 0;
+  int _noticeUnread = 0;
   bool _isLoading = true;
+  Timer? _suspensionTimer;
 
   @override
   void initState() {
     super.initState();
     _fetchData();
+    // Suspended mid-session → sign out to Login with notice.
+    _guardSuspension();
+    _suspensionTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _guardSuspension(),
+    );
     _client.from('students').stream(primaryKey: ['id']).listen((_) => _fetchData());
+  }
+
+  @override
+  void dispose() {
+    _suspensionTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _guardSuspension() async {
+    try {
+      final session = await SessionService.getSession();
+      if (session == null || session.role != UserRole.teacher.name) return;
+      final auth = AuthService();
+      final profile = await auth.getUserById(
+        userId: session.userId,
+        role: UserRole.teacher,
+      );
+      if (!AuthService.isSuspended(profile)) return;
+      await auth.logout();
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const LoginScreen(
+              suspendedNotice: true, suspendedRole: 'teacher'),
+        ),
+        (_) => false,
+      );
+    } catch (_) {}
   }
 
   Future<void> _fetchData() async {
@@ -92,11 +138,10 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
         myCount = 0;
       }
 
-      // 3. Optional: try to load real counts if those tables exist,
-      //    otherwise keep the placeholder numbers from the design.
-      int memoryCount = _memoryVerseCount;
-      int lessonCount = _lessonPlanCount;
-      int notifCount = _notificationCount;
+      // 3. Section-scoped counts where the tables exist.
+      int memoryCount = 0;
+      int lessonCount = 0;
+      int notifCount = 0;
       try {
         final mv = section == null || section.isEmpty
             ? await _client.from('memory_verses').select('id')
@@ -107,9 +152,25 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
         memoryCount = mv.length;
       } catch (_) {}
       try {
-        final lp = await _client.from('lesson_plans').select('id');
+        final lp = section == null || section.isEmpty
+            ? await _client.from('lesson_plans').select('id')
+            : await _client
+                .from('lesson_plans')
+                .select('id')
+                .eq('grade', section)
+                .eq('status', 'published');
         lessonCount = lp.length;
-      } catch (_) {}
+      } catch (_) {
+        try {
+          final lp = section == null || section.isEmpty
+              ? await _client.from('lesson_plans').select('id')
+              : await _client
+                  .from('lesson_plans')
+                  .select('id')
+                  .eq('grade', section);
+          lessonCount = lp.length;
+        } catch (_) {}
+      }
       try {
         final nt = await _client.from('notifications').select('id');
         notifCount = nt.length;
@@ -126,22 +187,52 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
           _notificationCount = notifCount;
           _isLoading = false;
         });
+        _loadNoticeUnread();
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  /// Unread notice count for the Notice Board quick-link badge.
+  Future<void> _loadNoticeUnread() async {
+    try {
+      String key = '';
+      try {
+        final session = await SessionService.getSession();
+        key = session?.userId ?? '';
+      } catch (_) {}
+      key = key.isEmpty
+          ? (_teacherId ?? _teacherName ?? widget.fullName)
+          : key;
+      final rows = await _client
+          .from('notices')
+          .select('id,read_by')
+          .inFilter(
+              'audience', NoticeService.visibleAudiencesFor('teacher'));
+      int count = 0;
+      for (final r in (rows as List)) {
+        final m = Map<String, dynamic>.from(r as Map);
+        if (NoticeService.isUnread(m, key)) count++;
+      }
+      if (mounted) setState(() => _noticeUnread = count);
+    } catch (_) {}
+  }
+
+  void _deny(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: GoogleFonts.poppins()),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
   void _openMyStudents() {
     if (_teacherSection == null || _teacherSection!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No section assigned yet', style: GoogleFonts.poppins()),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      _deny('No section assigned yet');
       return;
     }
     Navigator.push(
@@ -157,16 +248,25 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
     );
   }
 
+  void _openMyAttendance() {
+    if (_teacherId == null || _teacherId!.isEmpty) {
+      _deny('Could not identify teacher account');
+      return;
+    }
+    Navigator.push(
+      context,
+      SlidePageRoute(
+        page: TeacherMyAttendance(
+          teacherId: _teacherId!,
+          section: _teacherSection ?? '',
+        ),
+      ),
+    );
+  }
+
   void _openMemoryVerse() {
     if (_teacherSection == null || _teacherSection!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No section assigned yet', style: GoogleFonts.poppins()),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      _deny('No section assigned yet');
       return;
     }
     Navigator.push(
@@ -181,354 +281,206 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
     );
   }
 
-  String _formatSection(String? section) {
-    if (section == null || section.isEmpty) return 'Not Assigned';
-    if (section == 'sub-junior') return 'Sub Junior';
-    if (section.length == 1) return section.toUpperCase();
-    return section[0].toUpperCase() + section.substring(1);
-  }
-
-  String _getInitials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts[0].isEmpty) return '?';
-    if (parts.length == 1) return parts[0][0].toUpperCase();
-    return '${parts[0][0]}${parts[parts.length - 1][0]}'.toUpperCase();
+  void _openLessonPlan() {
+    if (_teacherSection == null || _teacherSection!.isEmpty) {
+      _deny('No section assigned yet');
+      return;
+    }
+    Navigator.push(
+      context,
+      SlidePageRoute(
+        page: TeacherLessonPlanPage(
+          section: _teacherSection!,
+          teacherId: _teacherId ?? '',
+          teacherName: _teacherName ?? widget.fullName,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final sectionLabel = dashPrettySection(_teacherSection);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F5F9),
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 200,
-            floating: false,
-            pinned: true,
-            elevation: 0,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF0D47A1), Color(0xFF1565C0), Color(0xFF42A5F5)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+      backgroundColor: DashColors.bg,
+      body: RefreshIndicator(
+        onRefresh: _fetchData,
+        color: const Color(0xFF7C3AED),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverAppBar(
+              expandedHeight: 250,
+              floating: false,
+              pinned: true,
+              elevation: 0,
+              flexibleSpace: FlexibleSpaceBar(
+                background: DashboardHero(
+                  gradient: DashColors.teacherGradient,
+                  greeting: dashGreeting(),
+                  name: _teacherName ?? widget.fullName,
+                  roleLabel: 'Teacher',
+                  sectionLabel: sectionLabel,
                 ),
-                child: SafeArea(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 20),
-                      CircleAvatar(
-                        radius: 36,
-                        backgroundColor: Colors.white.withValues(alpha: 0.2),
-                        child: Text(
-                          _getInitials(widget.fullName),
-                          style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-                        ),
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.logout_rounded),
+                  color: Colors.white,
+                  tooltip: 'Log out',
+                  onPressed: () => confirmLogout(context),
+                ),
+              ],
+            ),
+            SliverToBoxAdapter(
+              child: _isLoading
+                  ? const Padding(
+                      padding: EdgeInsets.only(top: 90),
+                      child: Center(
+                          child: CircularProgressIndicator(
+                              color: Color(0xFF7C3AED))),
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          FadeInSlide(
+                              index: 0,
+                              child: DashSectionHeading('Overview',
+                                  trailing: dashTodayLabel())),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 1,
+                            child: GridView.count(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              crossAxisCount: 2,
+                              mainAxisSpacing: 12,
+                              crossAxisSpacing: 12,
+                              mainAxisExtent: 158,
+                              children: [
+                                DashStat(
+                                  label: 'My Students',
+                                  value: '$_myStudentCount',
+                                  subtitle: sectionLabel,
+                                  icon: Icons.group_outlined,
+                                  color: const Color(0xFF6366F1),
+                                  onTap: _openMyStudents,
+                                ),
+                                DashStat(
+                                  label: 'Memory Verses',
+                                  value: '$_memoryVerseCount',
+                                  subtitle: 'This section',
+                                  icon: Icons.menu_book_outlined,
+                                  color: const Color(0xFF22C55E),
+                                  onTap: _openMemoryVerse,
+                                ),
+                                DashStat(
+                                  label: 'Lesson Plans',
+                                  value: '$_lessonPlanCount',
+                                  subtitle: 'Published',
+                                  icon: Icons.description_outlined,
+                                  color: const Color(0xFFFF9F0A),
+                                  onTap: _openLessonPlan,
+                                ),
+                                DashStat(
+                                  label: 'Notifications',
+                                  value: '$_notificationCount',
+                                  subtitle: 'Latest updates',
+                                  icon: Icons.notifications_outlined,
+                                  color: const Color(0xFFA855F7),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          FadeInSlide(
+                              index: 2,
+                              child: const DashSectionHeading('Quick Links')),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 3,
+                            child: DashQuickLink(
+                              icon: Icons.school_rounded,
+                              title: 'Students',
+                              subtitle:
+                                  'View $sectionLabel students ($_myStudentCount)',
+                              color: const Color(0xFF22C55E),
+                              colorEnd: const Color(0xFF4ADE80),
+                              onTap: _openMyStudents,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 4,
+                            child: DashQuickLink(
+                              icon: Icons.person_rounded,
+                              title: 'My Attendance',
+                              subtitle: 'View your attendance history',
+                              color: const Color(0xFF1565C0),
+                              colorEnd: const Color(0xFF42A5F5),
+                              onTap: _openMyAttendance,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 5,
+                            child: DashQuickLink(
+                              icon: Icons.menu_book_rounded,
+                              title: '📚 Lesson Plan',
+                              subtitle: 'View $sectionLabel lesson plan',
+                              color: const Color(0xFFFF9F0A),
+                              colorEnd: const Color(0xFFFFB74D),
+                              onTap: _openLessonPlan,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 6,
+                            child: DashQuickLink(
+                              icon: Icons.download_rounded,
+                              title: '📥 Download Center',
+                              subtitle: 'Resources shared with you',
+                              color: const Color(0xFF1565C0),
+                              colorEnd: const Color(0xFF42A5F5),
+                              onTap: () => Navigator.push(
+                                  context,
+                                  SlidePageRoute(
+                                      page:
+                                          const TeacherDownloadCenterPage())),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 7,
+                            child: DashQuickLink(
+                              icon: Icons.campaign_rounded,
+                              title: '📢 Notice Board',
+                              subtitle: 'Important notices from the Admin',
+                              color: const Color(0xFFB45309),
+                              colorEnd: const Color(0xFFF59E0B),
+                              badge: _noticeUnread > 0
+                                  ? '🔴 $_noticeUnread'
+                                  : null,
+                              onTap: () => Navigator.push(
+                                  context,
+                                  SlidePageRoute(
+                                      page: TeacherNoticeBoardPage(
+                                        teacherId: _teacherId ?? '',
+                                        teacherName: _teacherName ??
+                                            widget.fullName,
+                                      ))).then(
+                                  (_) => _loadNoticeUnread()),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
                       ),
-                      const SizedBox(height: 10),
-                      Text(widget.fullName,
-                          style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text('Teacher',
-                            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.logout_rounded),
-                color: Colors.white,
-                onPressed: () async {
-                  await AuthService().logout();
-                  if (!context.mounted) return;
-                  Navigator.pushAndRemoveUntil(
-                      context, MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
-                },
-              ),
-            ],
-          ),
-          SliverToBoxAdapter(
-            child: _isLoading
-                ? const Padding(
-                    padding: EdgeInsets.only(top: 100),
-                    child: Center(child: CircularProgressIndicator(color: Color(0xFF1565C0))),
-                  )
-                : Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        FadeInSlide(index: 0, child: _teachingSectionCard()),
-                        const SizedBox(height: 12),
-                        FadeInSlide(
-                          index: 1,
-                          child: _statCard(
-                            title: 'My Students',
-                            value: '$_myStudentCount',
-                            icon: Icons.group_outlined,
-                            color: const Color(0xFF6366F1),
-                            onTap: _openMyStudents,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        FadeInSlide(
-                          index: 2,
-                          child: _statCard(
-                            title: 'Memory Verses',
-                            value: '$_memoryVerseCount',
-                            icon: Icons.menu_book_outlined,
-                            color: const Color(0xFF22C55E),
-                            onTap: _openMemoryVerse,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        FadeInSlide(
-                          index: 3,
-                          child: _statCard(
-                            title: 'Lesson Plans',
-                            value: '$_lessonPlanCount',
-                            icon: Icons.description_outlined,
-                            color: const Color(0xFFFF9F0A),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        FadeInSlide(
-                          index: 4,
-                          child: _statCard(
-                            title: 'Notifications',
-                            value: '$_notificationCount',
-                            icon: Icons.notifications_outlined,
-                            color: const Color(0xFFA855F7),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        FadeInSlide(index: 5, child: _buildQuickLinks()),
-                        const SizedBox(height: 8),
-                      ],
                     ),
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Purple header card — "Your Teaching Section / Junior"
-  Widget _teachingSectionCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF6366F1).withValues(alpha: 0.35),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.22),
-              borderRadius: BorderRadius.circular(16),
             ),
-            child: const Icon(Icons.school_outlined, color: Colors.white, size: 30),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Your Teaching Section',
-                  style: GoogleFonts.poppins(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white.withValues(alpha: 0.85),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _formatSection(_teacherSection),
-                  style: GoogleFonts.poppins(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    height: 1.1,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Quick Links — just like admin, but locked to teacher's section
-  Widget _buildQuickLinks() {
-    final sectionLabel = _formatSection(_teacherSection);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Quick Links',
-          style: GoogleFonts.poppins(
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-            color: const Color(0xFF111827),
-          ),
-        ),
-        const SizedBox(height: 12),
-        GestureDetector(
-          onTap: _openMyStudents,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFF43A047).withValues(alpha: 0.2)),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF43A047).withValues(alpha: 0.08),
-                  blurRadius: 15,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(colors: [Color(0xFF43A047), Color(0xFF66BB6A)]),
-                    borderRadius: BorderRadius.all(Radius.circular(14)),
-                  ),
-                  child: const Icon(Icons.school_rounded, color: Colors.white, size: 26),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Students',
-                          style: GoogleFonts.poppins(
-                              fontSize: 16, fontWeight: FontWeight.w600, color: const Color(0xFF1A1A2E))),
-                      Text('View $sectionLabel students ($_myStudentCount)',
-                          style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey.shade500)),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF43A047), size: 18),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// White stat card — same style as student dashboard
-  Widget _statCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-    VoidCallback? onTap,
-  }) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      elevation: 0,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFF1F5F9)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.poppins(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w500,
-                      color: const Color(0xFF6B7280),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    value,
-                    style: GoogleFonts.poppins(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF111827),
-                      height: 1.0,
-                    ),
-                  ),
-                ],
-              ),
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [color, color.withValues(alpha: 0.82)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.35),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Icon(icon, color: Colors.white, size: 27),
-              ),
-            ],
-          ),
+          ],
         ),
       ),
     );

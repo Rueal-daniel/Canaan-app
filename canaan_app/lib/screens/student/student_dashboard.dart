@@ -4,11 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../widgets/animations.dart';
+import '../../widgets/dashboard_design.dart';
 import '../../services/auth_service.dart';
+import '../../services/notice_service.dart';
 import '../../services/session_service.dart';
 import '../login_screen.dart';
+import 'download_center.dart';
 import 'memory_verse.dart';
 import 'my_attendance.dart';
+import 'notice_board.dart';
 
 class StudentDashboard extends StatefulWidget {
   final String fullName;
@@ -26,8 +30,18 @@ class StudentDashboard extends StatefulWidget {
 }
 
 class _StudentDashboardState extends State<StudentDashboard> {
+  final _client = Supabase.instance.client;
   Timer? _suspensionTimer;
+
   int _memoryVerseCount = 0;
+  int _lessonPlanCount = 0;
+  int _presentCount = 0;
+  int _totalSessions = 0;
+  int _noticeUnread = 0;
+  bool _isLoading = true;
+
+  double get _attendanceRate =>
+      _totalSessions == 0 ? 0 : (_presentCount / _totalSessions) * 100;
 
   @override
   void initState() {
@@ -39,7 +53,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
       const Duration(seconds: 60),
       (_) => _guardSuspension(),
     );
-    _loadVerseCount();
+    _loadAll();
   }
 
   @override
@@ -70,6 +84,102 @@ class _StudentDashboardState extends State<StudentDashboard> {
     } catch (_) {}
   }
 
+  String _norm(String? v) => (v ?? '').trim().toLowerCase();
+
+  Future<void> _loadAll() async {
+    try {
+      // Memory verses for this section.
+      int verses = 0;
+      final section = widget.section;
+      if (section != null && section.isNotEmpty) {
+        try {
+          final rows = await _client
+              .from('memory_verses')
+              .select('id')
+              .eq('section', section);
+          verses = rows.length;
+        } catch (_) {}
+
+        // Published lesson plans for this section.
+        try {
+          final plans = await _client
+              .from('lesson_plans')
+              .select('id')
+              .eq('grade', section)
+              .eq('status', 'published');
+          _lessonPlanCount = plans.length;
+        } catch (_) {
+          try {
+            final plans = await _client
+                .from('lesson_plans')
+                .select('id')
+                .eq('grade', section);
+            _lessonPlanCount = plans.length;
+          } catch (_) {}
+        }
+      }
+
+      // Attendance rate — same matching as MyAttendance:
+      // attendance_reports rows hold a `students` JSON array.
+      int present = 0;
+      int total = 0;
+      try {
+        final rows = await _client
+            .from('attendance_reports')
+            .select('date, students')
+            .order('date', ascending: false);
+        final me = _norm(widget.fullName);
+        for (final row in (rows as List)) {
+          final students = row['students'];
+          if (students is! List) continue;
+          for (final s in students) {
+            if (s is! Map) continue;
+            if (_norm(s['name']?.toString()) != me) continue;
+            total++;
+            final st = _norm(s['status']?.toString());
+            if (st == 'present' || st == 'late') present++;
+            break; // one entry per report row
+          }
+        }
+      } catch (_) {}
+
+      if (mounted) {
+        setState(() {
+          _memoryVerseCount = verses;
+          _presentCount = present;
+          _totalSessions = total;
+          _isLoading = false;
+        });
+        _loadNoticeUnread();
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Unread notice count for the Notice Board quick-link badge.
+  Future<void> _loadNoticeUnread() async {
+    try {
+      String key = '';
+      try {
+        final session = await SessionService.getSession();
+        key = session?.userId ?? '';
+      } catch (_) {}
+      key = key.isEmpty ? 'name:${widget.fullName}' : key;
+      final rows = await _client
+          .from('notices')
+          .select('id,read_by')
+          .inFilter(
+              'audience', NoticeService.visibleAudiencesFor('student'));
+      int count = 0;
+      for (final r in (rows as List)) {
+        final m = Map<String, dynamic>.from(r as Map);
+        if (NoticeService.isUnread(m, key)) count++;
+      }
+      if (mounted) setState(() => _noticeUnread = count);
+    } catch (_) {}
+  }
+
   void _openAttendance() {
     Navigator.push(
       context,
@@ -96,211 +206,183 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  Future<void> _loadVerseCount() async {
-    final section = widget.section;
-    if (section == null || section.isEmpty) return;
-    try {
-      final rows = await Supabase.instance.client
-          .from('memory_verses')
-          .select('id')
-          .eq('section', section);
-      if (mounted) setState(() => _memoryVerseCount = rows.length);
-    } catch (_) {}
-  }
-
-  String _getInitials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts[0].isEmpty) return '?';
-    if (parts.length == 1) return parts[0][0].toUpperCase();
-    return '${parts[0][0]}${parts[parts.length - 1][0]}'.toUpperCase();
-  }
-
   @override
   Widget build(BuildContext context) {
+    final sectionLabel = dashPrettySection(widget.section);
+    final photo = widget.photoUrl != null && widget.photoUrl!.isNotEmpty
+        ? 'https://pjytoxyddfrsrkzappbb.supabase.co/storage/v1/object/public/student-photos/${widget.photoUrl}'
+        : null;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4F8),
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 220,
-            floating: false,
-            pinned: true,
-            elevation: 0,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFF0D47A1),
-                      Color(0xFF1565C0),
-                      Color(0xFF64B5F6),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+      backgroundColor: DashColors.bg,
+      body: RefreshIndicator(
+        onRefresh: _loadAll,
+        color: const Color(0xFF0E9F6E),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverAppBar(
+              expandedHeight: 250,
+              floating: false,
+              pinned: true,
+              elevation: 0,
+              flexibleSpace: FlexibleSpaceBar(
+                background: DashboardHero(
+                  gradient: DashColors.studentGradient,
+                  greeting: dashGreeting(),
+                  name: widget.fullName,
+                  roleLabel: 'Student',
+                  sectionLabel: sectionLabel,
+                  photoUrl: photo,
                 ),
-                child: SafeArea(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 20),
-                      CircleAvatar(
-                        radius: 40,
-                        backgroundColor: Colors.white.withValues(alpha: 0.2),
-                        backgroundImage:
-                            widget.photoUrl != null &&
-                                widget.photoUrl!.isNotEmpty
-                            ? NetworkImage(
-                                'https://pjytoxyddfrsrkzappbb.supabase.co/storage/v1/object/public/student-photos/${widget.photoUrl}',
-                              )
-                            : null,
-                        // Handler only when an image exists: Flutter asserts
-                        // backgroundImage != null whenever this is set.
-                        onBackgroundImageError:
-                            widget.photoUrl != null &&
-                                widget.photoUrl!.isNotEmpty
-                            ? (_, _) {}
-                            : null,
-                        child:
-                            widget.photoUrl == null || widget.photoUrl!.isEmpty
-                            ? Text(
-                                _getInitials(widget.fullName),
-                                style: GoogleFonts.poppins(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.logout_rounded),
+                  color: Colors.white,
+                  tooltip: 'Log out',
+                  onPressed: () => confirmLogout(context),
+                ),
+              ],
+            ),
+            SliverToBoxAdapter(
+              child: _isLoading
+                  ? const Padding(
+                      padding: EdgeInsets.only(top: 90),
+                      child: Center(
+                          child: CircularProgressIndicator(
+                              color: Color(0xFF0E9F6E))),
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          FadeInSlide(index: 0, child: _welcomeCard()),
+                          const SizedBox(height: 20),
+                          FadeInSlide(
+                              index: 1,
+                              child: DashSectionHeading('Overview',
+                                  trailing: dashTodayLabel())),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 2,
+                            child: GridView.count(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              crossAxisCount: 2,
+                              mainAxisSpacing: 12,
+                              crossAxisSpacing: 12,
+                              mainAxisExtent: 158,
+                              children: [
+                                DashStat(
+                                  label: 'Attendance Rate',
+                                  value:
+                                      '${_attendanceRate.toStringAsFixed(0)}%',
+                                  subtitle: '$_presentCount of $_totalSessions days',
+                                  icon: Icons.check_circle_outline_rounded,
+                                  color: const Color(0xFF22C55E),
+                                  onTap: _openAttendance,
                                 ),
-                              )
-                            : null,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        widget.fullName,
-                        style: GoogleFonts.poppins(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          'Student',
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
+                                DashStat(
+                                  label: 'Days Present',
+                                  value: '$_presentCount',
+                                  subtitle: 'Keep it up!',
+                                  icon: Icons.calendar_month_rounded,
+                                  color: const Color(0xFF1565C0),
+                                  onTap: _openAttendance,
+                                ),
+                                DashStat(
+                                  label: 'Memory Verses',
+                                  value: '$_memoryVerseCount',
+                                  subtitle: sectionLabel,
+                                  icon: Icons.menu_book_rounded,
+                                  color: const Color(0xFF6366F1),
+                                  onTap: _openMemoryVerse,
+                                ),
+                                DashStat(
+                                  label: 'Lesson Plans',
+                                  value: '$_lessonPlanCount',
+                                  subtitle: 'Published',
+                                  icon: Icons.auto_stories_rounded,
+                                  color: const Color(0xFFFF9F0A),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 20),
+                          FadeInSlide(
+                              index: 3,
+                              child: const DashSectionHeading('Quick Links')),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 4,
+                            child: DashQuickLink(
+                              icon: Icons.calendar_month_rounded,
+                              title: 'Attendance',
+                              subtitle: 'View your attendance records',
+                              color: const Color(0xFF22C55E),
+                              colorEnd: const Color(0xFF4ADE80),
+                              onTap: _openAttendance,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 5,
+                            child: DashQuickLink(
+                              icon: Icons.menu_book_rounded,
+                              title: 'Memory Verse',
+                              subtitle:
+                                  'View your $sectionLabel memory verses',
+                              color: const Color(0xFF6366F1),
+                              colorEnd: const Color(0xFF8B5CF6),
+                              onTap: _openMemoryVerse,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 6,
+                            child: DashQuickLink(
+                              icon: Icons.download_rounded,
+                              title: '📥 Download Center',
+                              subtitle: 'Resources shared with you',
+                              color: const Color(0xFF0E9F6E),
+                              colorEnd: const Color(0xFF4ADE80),
+                              onTap: () => Navigator.push(
+                                  context,
+                                  SlidePageRoute(
+                                      page:
+                                          const StudentDownloadCenterPage())),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 7,
+                            child: DashQuickLink(
+                              icon: Icons.campaign_rounded,
+                              title: '📢 Notice Board',
+                              subtitle: 'Important notices from the Admin',
+                              color: const Color(0xFFB45309),
+                              colorEnd: const Color(0xFFF59E0B),
+                              badge: _noticeUnread > 0
+                                  ? '🔴 $_noticeUnread'
+                                  : null,
+                              onTap: () => Navigator.push(
+                                  context,
+                                  SlidePageRoute(
+                                      page: StudentNoticeBoardPage(
+                                          studentName:
+                                              widget.fullName))).then(
+                                  (_) => _loadNoticeUnread()),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-              ),
+                    ),
             ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.logout_rounded),
-                color: Colors.white,
-                onPressed: () async {
-                  await AuthService().logout();
-                  if (!context.mounted) return;
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    (_) => false,
-                  );
-                },
-              ),
-            ],
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  FadeInSlide(index: 0, child: _welcomeCard()),
-                  const SizedBox(height: 20),
-                  FadeInSlide(
-                    index: 1,
-                    child: Text(
-                      'Overview',
-                      style: GoogleFonts.poppins(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF111827),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FadeInSlide(
-                    index: 1,
-                    child: _statCard(
-                      title: 'Attendance Rate',
-                      value: '100%',
-                      icon: Icons.check_circle_outline_rounded,
-                      color: const Color(0xFF22C55E),
-                      onTap: _openAttendance,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FadeInSlide(
-                    index: 2,
-                    child: _statCard(
-                      title: 'Memory Verses',
-                      value: '$_memoryVerseCount',
-                      icon: Icons.menu_book_rounded,
-                      color: const Color(0xFF6366F1),
-                      onTap: _openMemoryVerse,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FadeInSlide(
-                    index: 3,
-                    child: _statCard(
-                      title: 'Lesson Plans',
-                      value: '0',
-                      icon: Icons.auto_stories_rounded,
-                      color: const Color(0xFFFF9F0A),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FadeInSlide(
-                    index: 4,
-                    child: _statCard(
-                      title: 'Notifications',
-                      value: '2',
-                      icon: Icons.notifications_outlined,
-                      color: const Color(0xFFA855F7),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FadeInSlide(
-                    index: 5,
-                    child: _statCard(
-                      title: 'Quizzes',
-                      value: '0',
-                      icon: Icons.help_outline_rounded,
-                      color: const Color(0xFF9333EA),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  FadeInSlide(index: 6, child: _buildQuickLinks()),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -308,276 +390,57 @@ class _StudentDashboardState extends State<StudentDashboard> {
   Widget _welcomeCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFF1565C0).withValues(alpha: 0.1),
-            const Color(0xFF42A5F5).withValues(alpha: 0.08),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: const Color(0xFF1565C0).withValues(alpha: 0.15),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Welcome back!',
-            style: GoogleFonts.poppins(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF0D47A1),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Ready to learn something new today?',
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              color: Colors.grey.shade600,
-            ),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: DashColors.cardBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
-    );
-  }
-
-  /// Quick Links — Attendance card opens the student's own records.
-  Widget _buildQuickLinks() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Quick Links',
-          style: GoogleFonts.poppins(
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-            color: const Color(0xFF111827),
-          ),
-        ),
-        const SizedBox(height: 12),
-        GestureDetector(
-          onTap: _openAttendance,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: const Color(0xFF22C55E).withValues(alpha: 0.2),
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0E9F6E), Color(0xFF4ADE80)],
               ),
+              borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF22C55E).withValues(alpha: 0.08),
-                  blurRadius: 15,
+                  color: const Color(0xFF0E9F6E).withValues(alpha: 0.35),
+                  blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
               ],
             ),
-            child: Row(
+            child:
+                const Icon(Icons.waving_hand_rounded, color: Colors.white, size: 24),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF22C55E), Color(0xFF4ADE80)],
-                    ),
-                    borderRadius: BorderRadius.all(Radius.circular(14)),
-                  ),
-                  child: const Icon(
-                    Icons.calendar_month_rounded,
-                    color: Colors.white,
-                    size: 26,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Attendance',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF1A1A2E),
-                        ),
-                      ),
-                      Text(
-                        'View your attendance records',
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          color: Colors.grey.shade500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: Color(0xFF22C55E),
-                  size: 18,
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        GestureDetector(
-          onTap: _openMemoryVerse,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.08),
-                  blurRadius: 15,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                    ),
-                    borderRadius: BorderRadius.all(Radius.circular(14)),
-                  ),
-                  child: const Icon(
-                    Icons.menu_book_rounded,
-                    color: Colors.white,
-                    size: 26,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Memory Verse',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF1A1A2E),
-                        ),
-                      ),
-                      Text(
-                        'View your section memory verses',
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          color: Colors.grey.shade500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: Color(0xFF6366F1),
-                  size: 18,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _statCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-    VoidCallback? onTap,
-  }) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      elevation: 0,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFF1F5F9)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
+                Text('Welcome back!',
                     style: GoogleFonts.poppins(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w500,
-                      color: const Color(0xFF6B7280),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    value,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: DashColors.ink)),
+                const SizedBox(height: 2),
+                Text('Ready to learn something new today?',
                     style: GoogleFonts.poppins(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF111827),
-                      height: 1.0,
-                    ),
-                  ),
-                ],
-              ),
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [color, color.withValues(alpha: 0.82)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.35),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Icon(icon, color: Colors.white, size: 27),
-              ),
-            ],
+                        fontSize: 13, color: DashColors.muted)),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

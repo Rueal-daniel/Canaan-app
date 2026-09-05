@@ -4,9 +4,10 @@ import 'session_service.dart';
 
 enum UserRole { admin, teacher, student }
 
-/// Thrown when valid credentials belong to a suspended student.
+/// Thrown when valid credentials belong to a suspended account.
 class AccountSuspendedException implements Exception {
-  const AccountSuspendedException();
+  final UserRole? role;
+  const AccountSuspendedException([this.role]);
 }
 
 class AuthService {
@@ -60,9 +61,11 @@ class AuthService {
         .maybeSingle();
 
     if (response == null) return null;
-    // Suspended students authenticate but must never enter the dashboard.
-    if (role == UserRole.student && isSuspended(response)) {
-      throw const AccountSuspendedException();
+    // Suspended students/teachers authenticate but must never enter
+    // their dashboard.
+    if ((role == UserRole.student || role == UserRole.teacher) &&
+        isSuspended(response)) {
+      throw AccountSuspendedException(role);
     }
     return response;
   }
@@ -157,14 +160,15 @@ class AuthService {
   }
 
   /// Clears any session and throws [AccountSuspendedException] when the
-  /// profile belongs to a suspended student.
+  /// profile belongs to a suspended student or teacher.
   Future<void> _throwIfSuspended(
     UserRole role,
     Map<String, dynamic> profile,
   ) async {
-    if (role == UserRole.student && isSuspended(profile)) {
+    if ((role == UserRole.student || role == UserRole.teacher) &&
+        isSuspended(profile)) {
       await logout();
-      throw const AccountSuspendedException();
+      throw AccountSuspendedException(role);
     }
   }
 
@@ -180,18 +184,40 @@ class AuthService {
   }) async {
     final payload = <String, dynamic>{
       'status': suspended ? suspendedStatus : activeStatus,
-      'suspended_at': suspended ? DateTime.now().toIso8601String() : null,
-      'suspended_by_admin_id': suspended
-          ? (adminId.isEmpty ? null : adminId)
-          : null,
+      'suspended_at':
+          suspended ? DateTime.now().toIso8601String() : null,
+      'suspended_by_admin_id':
+          suspended ? (adminId.isEmpty ? null : adminId) : null,
     };
     try {
       await _client.from('students').update(payload).eq('id', studentId);
     } catch (_) {
-      await _client
-          .from('students')
-          .update({'status': suspended ? suspendedStatus : activeStatus})
-          .eq('id', studentId);
+      await _client.from('students').update({
+        'status': suspended ? suspendedStatus : activeStatus,
+      }).eq('id', studentId);
+    }
+  }
+
+  /// Suspends or restores a teacher account. Suspension only flips
+  /// account access — attendance, verses and all other data are kept.
+  Future<void> setTeacherStatus({
+    required String teacherId,
+    required bool suspended,
+    required String adminId,
+  }) async {
+    final payload = <String, dynamic>{
+      'status': suspended ? suspendedStatus : activeStatus,
+      'suspended_at':
+          suspended ? DateTime.now().toIso8601String() : null,
+      'suspended_by_admin_id':
+          suspended ? (adminId.isEmpty ? null : adminId) : null,
+    };
+    try {
+      await _client.from('teachers').update(payload).eq('id', teacherId);
+    } catch (_) {
+      await _client.from('teachers').update({
+        'status': suspended ? suspendedStatus : activeStatus,
+      }).eq('id', teacherId);
     }
   }
 
