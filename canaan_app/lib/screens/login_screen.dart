@@ -7,6 +7,7 @@ import '../widgets/animations.dart';
 import 'admin/admin_dashboard.dart';
 import 'teacher/teacher_dashboard.dart';
 import 'student/student_dashboard.dart';
+import 'reset_password_page.dart';
 
 class LoginScreen extends StatefulWidget {
   /// When true, shows the "Account Suspended" notice on open
@@ -413,7 +414,12 @@ class _LoginScreenState extends State<LoginScreen> {
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
-              onPressed: () {},
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  SlidePageRoute(page: const ResetPasswordPage()),
+                );
+              },
               child: Text(
                 'Forgot Password?',
                 style: GoogleFonts.poppins(

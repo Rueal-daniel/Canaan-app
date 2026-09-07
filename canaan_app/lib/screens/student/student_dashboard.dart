@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../widgets/animations.dart';
+import '../../widgets/app_sidebar.dart';
 import '../../widgets/dashboard_design.dart';
 import '../../services/auth_service.dart';
 import '../../services/notice_service.dart';
@@ -215,6 +216,13 @@ class _StudentDashboardState extends State<StudentDashboard> {
 
     return Scaffold(
       backgroundColor: DashColors.bg,
+      drawer: CanaanSidebar(
+        gradient: DashColors.studentGradient,
+        fullName: widget.fullName,
+        roleLabel: 'Student',
+        role: 'student',
+        photoUrl: photo,
+      ),
       body: RefreshIndicator(
         onRefresh: _loadAll,
         color: const Color(0xFF0E9F6E),
@@ -226,6 +234,14 @@ class _StudentDashboardState extends State<StudentDashboard> {
               floating: false,
               pinned: true,
               elevation: 0,
+              leading: Builder(
+                builder: (ctx) => IconButton(
+                  icon: const Icon(Icons.menu_rounded),
+                  color: Colors.white,
+                  tooltip: 'Menu',
+                  onPressed: () => Scaffold.of(ctx).openDrawer(),
+                ),
+              ),
               flexibleSpace: FlexibleSpaceBar(
                 background: DashboardHero(
                   gradient: DashColors.studentGradient,

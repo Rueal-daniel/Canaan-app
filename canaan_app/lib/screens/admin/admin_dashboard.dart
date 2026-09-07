@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../widgets/animations.dart';
+import '../../widgets/app_sidebar.dart';
 import '../../widgets/dashboard_design.dart';
 import 'student_management.dart';
 import 'teacher_management.dart';
 import 'management_screen.dart';
+import 'authentication.dart';
 
 class AdminDashboard extends StatefulWidget {
   final String fullName;
@@ -93,6 +95,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     return Scaffold(
       backgroundColor: DashColors.bg,
+      drawer: CanaanSidebar(
+        gradient: DashColors.adminGradient,
+        fullName: widget.fullName,
+        roleLabel: 'Canaan Administrator',
+        role: 'admin',
+      ),
       body: RefreshIndicator(
         onRefresh: _fetchAll,
         color: const Color(0xFF1565C0),
@@ -104,6 +112,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
               floating: false,
               pinned: true,
               elevation: 0,
+              leading: Builder(
+                builder: (ctx) => IconButton(
+                  icon: const Icon(Icons.menu_rounded),
+                  color: Colors.white,
+                  tooltip: 'Menu',
+                  onPressed: () => Scaffold.of(ctx).openDrawer(),
+                ),
+              ),
               flexibleSpace: FlexibleSpaceBar(
                 background: DashboardHero(
                   gradient: DashColors.adminGradient,
@@ -263,6 +279,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                   context,
                                   SlidePageRoute(
                                       page: ManagementScreen(
+                                          adminName: widget.fullName))),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 9,
+                            child: DashQuickLink(
+                              icon: Icons.lock_person_rounded,
+                              title: '🔐 Authentication',
+                              subtitle: 'Password reset requests',
+                              color: const Color(0xFF0B2A5B),
+                              colorEnd: const Color(0xFF1565C0),
+                              onTap: () => Navigator.push(
+                                  context,
+                                  SlidePageRoute(
+                                      page: AuthenticationPage(
                                           adminName: widget.fullName))),
                             ),
                           ),
