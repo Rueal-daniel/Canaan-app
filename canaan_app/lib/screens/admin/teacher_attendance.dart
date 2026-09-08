@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../services/notification_service.dart';
+
 /// Admin → Teachers → Teacher Attendance.
 ///
 /// Admin marks teacher attendance per section. Exactly two statuses:
@@ -202,6 +204,17 @@ class _TeacherAttendanceAdminState extends State<TeacherAttendanceAdmin>
       if (mounted) {
         setState(() => _alreadySubmitted = true);
       }
+      // 🔔 Notify each teacher (fire-and-forget; never blocks submit).
+      try {
+        for (final t in _teachers) {
+          final tid = t['id'].toString();
+          NotificationService.teacherAttendanceMarked(
+            teacherId: tid,
+            status: _statuses[tid] ?? 'present',
+            date: _todayStr,
+          );
+        }
+      } catch (_) {}
       _snack('Teacher attendance submitted successfully!', Colors.green);
     } catch (e) {
       _snack('Could not submit attendance: $e', Colors.red);

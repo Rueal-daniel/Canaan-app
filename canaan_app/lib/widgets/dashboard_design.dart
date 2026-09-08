@@ -317,6 +317,7 @@ class DashStat extends StatelessWidget {
   final IconData icon;
   final Color color;
   final VoidCallback? onTap;
+  final String? badge;
   const DashStat({
     super.key,
     required this.label,
@@ -325,6 +326,7 @@ class DashStat extends StatelessWidget {
     required this.color,
     this.subtitle,
     this.onTap,
+    this.badge,
   });
 
   @override
@@ -349,45 +351,67 @@ class DashStat extends StatelessWidget {
               ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Stack(
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: Icon(icon, color: color, size: 22),
-              ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(
-                          fontSize: 25,
-                          fontWeight: FontWeight.w800,
-                          color: DashColors.ink,
-                          height: 1.1)),
-                  const SizedBox(height: 2),
-                  Text(label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w500,
-                          color: DashColors.muted)),
-                  if (subtitle != null)
-                    Text(subtitle!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.poppins(
-                            fontSize: 11, color: DashColors.muted)),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: Icon(icon, color: color, size: 22),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(value,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.poppins(
+                              fontSize: 25,
+                              fontWeight: FontWeight.w800,
+                              color: DashColors.ink,
+                              height: 1.1)),
+                      const SizedBox(height: 2),
+                      Text(label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.poppins(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                              color: DashColors.muted)),
+                      if (subtitle != null)
+                        Text(subtitle!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.poppins(
+                                fontSize: 11, color: DashColors.muted)),
+                    ],
+                  ),
                 ],
               ),
+              if (badge != null && badge!.isNotEmpty)
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 9, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(badge!,
+                        style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white)),
+                  ),
+                ),
             ],
           ),
         ),

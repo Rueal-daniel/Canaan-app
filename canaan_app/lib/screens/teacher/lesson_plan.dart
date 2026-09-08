@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/lesson_plan_service.dart';
+import '../../services/seen_store.dart';
 import '../../widgets/animations.dart';
 import '../lesson_pdf_viewer.dart';
 
@@ -138,6 +139,8 @@ class _TeacherLessonPlanPageState extends State<TeacherLessonPlanPage> {
           _isLoading = false;
           _loadError = null;
         });
+        SeenStore.markSeen('seen_teacher_lessons',
+            plans.map((p) => (p['id'] ?? '').toString()));
       }
     } catch (e) {
       if (mounted) {

@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/lesson_plan_service.dart';
+import '../../services/notification_service.dart';
 import '../../services/session_service.dart';
 import '../../widgets/animations.dart';
 import '../lesson_pdf_viewer.dart';
@@ -345,6 +346,15 @@ class _AdminLessonPlanPageState extends State<AdminLessonPlanPage> {
             : '✅ Lesson plan published successfully!',
         Colors.green,
       );
+      // 🔔 Notify the section (new plans only, no edit spam).
+      if (!isEditing) {
+        try {
+          NotificationService.lessonPlanPublished(
+            lessonId: lessonId.toString(),
+            section: grade,
+          );
+        } catch (_) {}
+      }
       _resetForm();
       await _fetchPlans(silent: true);
     } catch (e) {

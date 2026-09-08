@@ -1,9 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../services/auth_service.dart';
+import '../../services/credential_service.dart';
+import '../../services/notification_navigation.dart';
+import '../../services/password_reset_service.dart';
+import '../../services/seen_store.dart';
+import '../../services/session_service.dart';
 import '../../widgets/animations.dart';
 import '../../widgets/app_sidebar.dart';
 import '../../widgets/dashboard_design.dart';
+import '../../widgets/notification_bell.dart';
 import 'student_management.dart';
 import 'teacher_management.dart';
 import 'management_screen.dart';
@@ -27,24 +36,117 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Map<String, int> _teacherSections = {};
   Map<String, int> _studentSections = {};
   bool _isLoading = true;
+  int _leavePending = 0;
+  int _authPending = 0;
+  String _notifUserId = '';
+  final List<StreamSubscription> _realtimeSubs = [];
 
   @override
   void initState() {
     super.initState();
     _fetchAll();
     _subscribeToChanges();
+    _loadNotifIdentity();
+  }
+
+  /// Resolves the logged-in admin's row id for the notification bell.
+  /// Falls back to an `admin` table lookup by name: on shared devices
+  /// the single saved session may belong to another role's last login.
+  Future<void> _loadNotifIdentity() async {
+    try {
+      final session = await SessionService.getSession();
+      if (!mounted) return;
+      final role = (session?.role ?? '').trim().toLowerCase();
+      if (session != null &&
+          role == UserRole.admin.name &&
+          session.userId.isNotEmpty) {
+        setState(() => _notifUserId = session.userId);
+        return;
+      }
+    } catch (_) {}
+    try {
+      final rows = await _client
+          .from('admin')
+          .select('id')
+          .eq('full_name', widget.fullName)
+          .limit(1);
+      final list = List<Map<String, dynamic>>.from(rows);
+      if (list.isNotEmpty && mounted) {
+        final id = (list.first['id'] ?? '').toString();
+        if (id.isNotEmpty) setState(() => _notifUserId = id);
+      }
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    for (final s in _realtimeSubs) {
+      s.cancel();
+    }
     super.dispose();
   }
 
   void _subscribeToChanges() {
-    _client.from('admin').stream(primaryKey: ['id']).listen((_) => _fetchAll());
-    _client.from('teachers').stream(primaryKey: ['id']).listen((_) => _fetchAll());
-    _client.from('students').stream(primaryKey: ['id']).listen((_) => _fetchAll());
-    _client.from('attendance_reports').stream(primaryKey: ['id']).listen((_) => _fetchAll());
+    void watch(String table, Future<void> Function() onData) {
+      try {
+        _realtimeSubs.add(_client
+            .from(table)
+            .stream(primaryKey: ['id'])
+            .listen((_) => onData()));
+      } catch (_) {}
+    }
+
+    watch('admin', _fetchAll);
+    watch('teachers', _fetchAll);
+    watch('students', _fetchAll);
+    watch('attendance_reports', _fetchAll);
+    // Live pending-action badges.
+    watch('student_leave_applications', _loadPendingBadges);
+    watch('password_reset_requests', _loadPendingBadges);
+    watch('credential_change_requests', _loadPendingBadges);
+  }
+
+  /// Red badges for work waiting on the Admin.
+  Future<void> _loadPendingBadges() async {
+    if (!mounted) return;
+    try {
+      final results = await Future.wait([
+        () async {
+          try {
+            final rows = await _client
+                .from('student_leave_applications')
+                .select('id')
+                .eq('status', 'pending');
+            return (rows as List).length;
+          } catch (_) {
+            return 0;
+          }
+        }(),
+        () async {
+          var n = 0;
+          try {
+            final rows = await _client
+                .from('password_reset_requests')
+                .select('id')
+                .eq('status', PasswordResetService.statusPending);
+            n += (rows as List).length;
+          } catch (_) {}
+          try {
+            final rows = await _client
+                .from('credential_change_requests')
+                .select('id')
+                .eq('status', CredentialService.statusPending);
+            n += (rows as List).length;
+          } catch (_) {}
+          return n;
+        }(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _leavePending = results[0];
+        _authPending = results[1];
+      });
+    } catch (_) {}
   }
 
   Future<void> _fetchAll() async {
@@ -76,6 +178,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           _studentSections = sSections;
           _isLoading = false;
         });
+        _loadPendingBadges();
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -130,6 +233,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 ),
               ),
               actions: [
+                NotificationBell(
+                  userId: _notifUserId,
+                  role: 'admin',
+                  gradient: DashColors.adminGradient,
+                  onNotificationTap: (n) =>
+                      NotificationNavigation.handleTap(
+                    context,
+                    role: 'admin',
+                    notification: n,
+                    fullName: widget.fullName,
+                    adminName: widget.fullName,
+                  ),
+                ),
                 IconButton(
                   icon: const Icon(Icons.logout_rounded),
                   color: Colors.white,
@@ -245,10 +361,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               subtitle: 'Manage students · $_studentCount total',
                               color: const Color(0xFF22C55E),
                               colorEnd: const Color(0xFF4ADE80),
+                              badge: SeenStore.badgeFor(_leavePending),
                               onTap: () => Navigator.push(
                                   context,
                                   SlidePageRoute(
-                                      page: const StudentManagement())),
+                                      page: const StudentManagement())).then(
+                                  (_) => _loadPendingBadges()),
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -291,11 +409,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               subtitle: 'Password reset requests',
                               color: const Color(0xFF0B2A5B),
                               colorEnd: const Color(0xFF1565C0),
+                              badge: SeenStore.badgeFor(_authPending),
                               onTap: () => Navigator.push(
                                   context,
                                   SlidePageRoute(
                                       page: AuthenticationPage(
-                                          adminName: widget.fullName))),
+                                          adminName: widget.fullName))).then(
+                                  (_) => _loadPendingBadges()),
                             ),
                           ),
                           const SizedBox(height: 8),

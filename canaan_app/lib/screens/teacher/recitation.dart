@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../services/notification_service.dart';
 import '../../services/recitation_service.dart';
 
 /// Teacher → Student → Memory Verse → Mark Recitation.
@@ -204,6 +205,19 @@ class _MarkRecitationState extends State<MarkRecitation> {
           await _client.from(table).insert(row);
         }
       }
+
+      // 🔔 Notify each student of their updated status (fire-and-forget).
+      try {
+        for (final s in _students) {
+          final sid = s['id'].toString();
+          NotificationService.recitationUpdated(
+            studentId: sid,
+            verseId: widget.verseId.toString(),
+            status: _statuses[sid] ?? RecitationService.notRecited,
+            section: widget.section,
+          );
+        }
+      } catch (_) {}
 
       if (!mounted) return;
       _showSavedPopup();

@@ -9,6 +9,8 @@ import 'std_photo.dart';
 import 'std_suspension.dart';
 import 'student_details.dart';
 import 'add_student.dart';
+import 'leave_applications.dart';
+import 'student_applications.dart';
 
 class StudentManagement extends StatelessWidget {
   final String? lockedSection;
@@ -256,6 +258,48 @@ class StudentManagement extends StatelessWidget {
                       context,
                       SlidePageRoute(
                         page: const MemoryVerseReports(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            if (!isLocked) const SizedBox(height: 12),
+            if (!isLocked)
+              FadeInSlide(
+                index: 7,
+                child: _OptionCard(
+                  icon: Icons.event_note_rounded,
+                  title: 'Leave Application',
+                  subtitle: 'Review student leave applications',
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0E9F6E), Color(0xFF34D399)],
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      SlidePageRoute(
+                        page: const AdminLeaveApplicationsPage(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            if (!isLocked) const SizedBox(height: 12),
+            if (!isLocked)
+              FadeInSlide(
+                index: 8,
+                child: _OptionCard(
+                  icon: Icons.send_rounded,
+                  title: 'Student Application',
+                  subtitle: 'Applications sent to teachers',
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      SlidePageRoute(
+                        page: const AdminStudentApplicationsPage(),
                       ),
                     );
                   },

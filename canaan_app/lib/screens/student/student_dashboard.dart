@@ -7,10 +7,15 @@ import '../../widgets/animations.dart';
 import '../../widgets/app_sidebar.dart';
 import '../../widgets/dashboard_design.dart';
 import '../../services/auth_service.dart';
+import '../../services/download_center_service.dart';
 import '../../services/notice_service.dart';
+import '../../services/notification_navigation.dart';
+import '../../services/seen_store.dart';
 import '../../services/session_service.dart';
+import '../../widgets/notification_bell.dart';
 import '../login_screen.dart';
 import 'download_center.dart';
+import 'leave_application.dart';
 import 'memory_verse.dart';
 import 'my_attendance.dart';
 import 'notice_board.dart';
@@ -39,7 +44,12 @@ class _StudentDashboardState extends State<StudentDashboard> {
   int _presentCount = 0;
   int _totalSessions = 0;
   int _noticeUnread = 0;
+  int _verseUnread = 0;
+  int _dcUnread = 0;
+  int _leaveUnread = 0;
   bool _isLoading = true;
+  String _notifUserId = '';
+  final List<StreamSubscription> _realtimeSubs = [];
 
   double get _attendanceRate =>
       _totalSessions == 0 ? 0 : (_presentCount / _totalSessions) * 100;
@@ -54,13 +64,46 @@ class _StudentDashboardState extends State<StudentDashboard> {
       const Duration(seconds: 60),
       (_) => _guardSuspension(),
     );
+    _loadNotifIdentity();
     _loadAll();
   }
 
   @override
   void dispose() {
     _suspensionTimer?.cancel();
+    for (final s in _realtimeSubs) {
+      s.cancel();
+    }
     super.dispose();
+  }
+
+  /// Resolves the logged-in student's row id for the notification bell.
+  /// Falls back to a `students` lookup by name: on shared devices the
+  /// single saved session may belong to another role's last login.
+  Future<void> _loadNotifIdentity() async {
+    try {
+      final session = await SessionService.getSession();
+      if (!mounted) return;
+      final role = (session?.role ?? '').trim().toLowerCase();
+      if (session != null &&
+          role == UserRole.student.name &&
+          session.userId.isNotEmpty) {
+        setState(() => _notifUserId = session.userId);
+        return;
+      }
+    } catch (_) {}
+    try {
+      final rows = await _client
+          .from('students')
+          .select('id')
+          .eq('full_name', widget.fullName)
+          .limit(1);
+      final list = List<Map<String, dynamic>>.from(rows);
+      if (list.isNotEmpty && mounted) {
+        final id = (list.first['id'] ?? '').toString();
+        if (id.isNotEmpty) setState(() => _notifUserId = id);
+      }
+    } catch (_) {}
   }
 
   Future<void> _guardSuspension() async {
@@ -152,9 +195,133 @@ class _StudentDashboardState extends State<StudentDashboard> {
           _isLoading = false;
         });
         _loadNoticeUnread();
+        _loadBadges();
+        _watchBadges();
       }
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Red number badges: anything new since the student last opened it.
+  /// Leave badge counts decided (approved/rejected) applications the
+  /// student hasn't opened yet.
+  Future<void> _loadBadges() async {
+    if (!mounted) return;
+    final section = widget.section;
+    try {
+      List<String> verseIds = [];
+      if (section != null && section.isNotEmpty) {
+        try {
+          final rows = await _client
+              .from('memory_verses')
+              .select('id')
+              .eq('section', section);
+          verseIds = (rows as List)
+              .map((r) => (r as Map)['id'].toString())
+              .toList();
+        } catch (_) {}
+      }
+      List<String> dcIds = [];
+      try {
+        final rows = await _client
+            .from('download_center')
+            .select('id')
+            .inFilter('audience',
+                DownloadCenterService.visibleAudiencesFor('student'));
+        dcIds = (rows as List)
+            .map((r) => (r as Map)['id'].toString())
+            .toList();
+      } catch (_) {
+        try {
+          final rows =
+              await _client.from('download_center').select('id');
+          dcIds = (rows as List)
+              .map((r) => (r as Map)['id'].toString())
+              .toList();
+        } catch (_) {}
+      }
+      final decidedIds = await _decidedLeaveIds();
+      final seen = await Future.wait([
+        SeenStore.getSeen('seen_student_verses'),
+        SeenStore.getSeen('seen_student_downloads'),
+        SeenStore.getSeen('seen_student_leavedecisions'),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _verseUnread = SeenStore.unseenCount(verseIds, seen[0]);
+        _dcUnread = SeenStore.unseenCount(dcIds, seen[1]);
+        _leaveUnread = SeenStore.unseenCount(decidedIds, seen[2]);
+      });
+    } catch (_) {}
+  }
+
+  /// Ids of my own decided leave applications.
+  Future<List<String>> _decidedLeaveIds() async {
+    try {
+      String myId = '';
+      try {
+        final session = await SessionService.getSession();
+        if (session != null && session.role == UserRole.student.name) {
+          myId = session.userId;
+        }
+      } catch (_) {}
+      List<Map<String, dynamic>> mine = [];
+      if (myId.isNotEmpty) {
+        try {
+          final res = await _client
+              .from('student_leave_applications')
+              .select('id,status')
+              .eq('student_id', myId);
+          mine = List<Map<String, dynamic>>.from(res);
+        } catch (_) {}
+      }
+      if (mine.isEmpty && widget.fullName.trim().isNotEmpty) {
+        try {
+          final res = await _client
+              .from('student_leave_applications')
+              .select('id,status,student_name')
+              .order('created_at', ascending: false)
+              .limit(100);
+          final want = _norm(widget.fullName);
+          for (final r in (res as List)) {
+            final m = Map<String, dynamic>.from(r as Map);
+            if (_norm(m['student_name']?.toString()) == want) mine.add(m);
+          }
+        } catch (_) {}
+      }
+      return mine
+          .where((m) =>
+              (m['status'] ?? '').toString() == 'approved' ||
+              (m['status'] ?? '').toString() == 'rejected')
+          .map((m) => (m['id'] ?? '').toString())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Live badge refresh for anything new.
+  void _watchBadges() {
+    if (_realtimeSubs.isNotEmpty) return;
+    for (final t in [
+      'memory_verses',
+      'download_center',
+      'student_leave_applications',
+      'notices',
+    ]) {
+      try {
+        _realtimeSubs.add(_client
+            .from(t)
+            .stream(primaryKey: ['id'])
+            .listen((_) {
+              if (mounted) {
+                _loadBadges();
+                if (t == 'notices') _loadNoticeUnread();
+              }
+            }));
+      } catch (_) {}
     }
   }
 
@@ -188,7 +355,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  void _openMemoryVerse() {
+  Future<void> _openMemoryVerse() async {
     final section = widget.section;
     if (section == null || section.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -201,10 +368,11 @@ class _StudentDashboardState extends State<StudentDashboard> {
       );
       return;
     }
-    Navigator.push(
+    await Navigator.push(
       context,
       SlidePageRoute(page: StudentMemoryVerse(section: section)),
     );
+    if (mounted) _loadBadges();
   }
 
   @override
@@ -253,6 +421,19 @@ class _StudentDashboardState extends State<StudentDashboard> {
                 ),
               ),
               actions: [
+                NotificationBell(
+                  userId: _notifUserId,
+                  role: 'student',
+                  gradient: DashColors.studentGradient,
+                  onNotificationTap: (n) =>
+                      NotificationNavigation.handleTap(
+                    context,
+                    role: 'student',
+                    notification: n,
+                    fullName: widget.fullName,
+                    section: widget.section,
+                  ),
+                ),
                 IconButton(
                   icon: const Icon(Icons.logout_rounded),
                   color: Colors.white,
@@ -314,6 +495,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                                   subtitle: sectionLabel,
                                   icon: Icons.menu_book_rounded,
                                   color: const Color(0xFF6366F1),
+                                  badge: SeenStore.badgeFor(_verseUnread),
                                   onTap: _openMemoryVerse,
                                 ),
                                 DashStat(
@@ -352,6 +534,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                                   'View your $sectionLabel memory verses',
                               color: const Color(0xFF6366F1),
                               colorEnd: const Color(0xFF8B5CF6),
+                              badge: SeenStore.badgeFor(_verseUnread),
                               onTap: _openMemoryVerse,
                             ),
                           ),
@@ -364,16 +547,37 @@ class _StudentDashboardState extends State<StudentDashboard> {
                               subtitle: 'Resources shared with you',
                               color: const Color(0xFF0E9F6E),
                               colorEnd: const Color(0xFF4ADE80),
+                              badge: SeenStore.badgeFor(_dcUnread),
                               onTap: () => Navigator.push(
                                   context,
                                   SlidePageRoute(
                                       page:
-                                          const StudentDownloadCenterPage())),
+                                          const StudentDownloadCenterPage())).then(
+                                  (_) => _loadBadges()),
                             ),
                           ),
                           const SizedBox(height: 12),
                           FadeInSlide(
                             index: 7,
+                            child: DashQuickLink(
+                              icon: Icons.event_note_rounded,
+                              title: 'Leave Application',
+                              subtitle: 'Explain an absence to the Admin',
+                              color: const Color(0xFF0E9F6E),
+                              colorEnd: const Color(0xFF34D399),
+                              badge: SeenStore.badgeFor(_leaveUnread),
+                              onTap: () => Navigator.push(
+                                  context,
+                                  SlidePageRoute(
+                                      page: StudentLeaveApplicationPage(
+                                          fullName: widget.fullName,
+                                          section: widget.section))).then(
+                                  (_) => _loadBadges()),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 8,
                             child: DashQuickLink(
                               icon: Icons.campaign_rounded,
                               title: '📢 Notice Board',

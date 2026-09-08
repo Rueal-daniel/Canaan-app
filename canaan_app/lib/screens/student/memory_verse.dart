@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/recitation_service.dart';
+import '../../services/seen_store.dart';
 import '../../services/session_service.dart';
 import '../../services/auth_service.dart';
 
@@ -67,6 +68,8 @@ class _StudentMemoryVerseState extends State<StudentMemoryVerse> {
           _myStatuses = myStatuses;
           _isLoading = false;
         });
+        SeenStore.markSeen('seen_student_verses',
+            verses.map((v) => (v['id'] ?? '').toString()));
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);

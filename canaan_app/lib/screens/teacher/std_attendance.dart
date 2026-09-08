@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/attendance_report_service.dart';
+import '../../services/notification_service.dart';
 
 /// Student Attendance (teacher side).
 ///
@@ -364,6 +367,19 @@ class _StdAttendanceState extends State<StdAttendance> {
           _reportStatus = AttendanceReportService.submitted;
         }
       });
+      // 🔔 Notify each marked student (fire-and-forget; never blocks save).
+      try {
+        final reportId = _existingReportId?.toString() ?? '';
+        for (final e in entries) {
+          unawaited(NotificationService.attendanceMarked(
+            studentId: (e['id'] ?? '').toString(),
+            status: (e['status'] ?? 'present').toString(),
+            section: widget.section,
+            date: _dateStr,
+            reportId: reportId.isEmpty ? null : reportId,
+          ));
+        }
+      } catch (_) {}
       _showSavedPopup();
     } catch (e) {
       if (!mounted) return;
@@ -526,6 +542,14 @@ class _StdAttendanceState extends State<StdAttendance> {
         _rejectionReason = null;
         _reviewedAt = null;
       });
+      // 🔔 Notify admins of the new report (fire-and-forget).
+      try {
+        unawaited(NotificationService.attendanceReportSent(
+          reportId: (_existingReportId as int).toString(),
+          section: widget.section,
+          date: _dateStr,
+        ));
+      } catch (_) {}
       _snack('Report sent! Status: Pending Admin Review', Colors.green);
     } catch (e) {
       _snack('Could not send report. Please try again.', Colors.red);

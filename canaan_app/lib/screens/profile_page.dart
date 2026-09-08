@@ -173,10 +173,11 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   String _value(String key) {
+    // Admins have no status column — they are always active.
+    if (key == 'status' && widget.role == 'admin') return 'Active';
     final v = _row?[key];
-    if (v == null) return '';
-    final s = v.toString().trim();
-    if (s.isEmpty) return '';
+    final s = v == null ? '' : v.toString().trim();
+    if (s.isEmpty) return '—';
     if (key == 'section') return dashPrettySection(s);
     if (key == 'role') {
       return s == 'admin' ? 'Canaan Administrator' : dashPrettySection(s);
@@ -186,6 +187,11 @@ class _ProfilePageState extends State<ProfilePage> {
     }
     if (key == 'created_at' || key == 'updated_at') return _prettyDate(s);
     return s;
+  }
+
+  bool _isEmpty(String key) {
+    final v = _row?[key];
+    return v == null || v.toString().trim().isEmpty;
   }
 
 
@@ -346,7 +352,7 @@ class _ProfilePageState extends State<ProfilePage> {
           runSpacing: 8,
           children: [
             _heroPill(_roleLabel),
-            if (status.isNotEmpty)
+            if (status.isNotEmpty && status != '—')
               _heroPill(status,
                   dot: isActive
                       ? const Color(0xFF4ADE80)
@@ -383,36 +389,50 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  /// Every field of the role's schema is shown — empty values render
+  /// as a dash instead of hiding the row.
   List<Widget> _groups() {
-    final groups = <String, List<String>>{
-      'Account': ['username', 'role', 'status'],
-      'Personal Details': ['full_name', 'age', 'email'],
-      'Contact': ['phone', 'email'],
-      'School': ['section', 'teacher_name'],
-      'Family': [
-        'father_name',
-        'father_phone',
-        'mother_name',
-        'mother_phone',
-        'guardian_phone'
-      ],
-      'Membership': ['created_at', 'updated_at'],
-    };
-    // Avoid showing email twice when it is the only contact detail.
-    final seen = <String>{};
+    final Map<String, List<String>> groups;
+    switch (widget.role) {
+      case 'admin':
+        groups = {
+          'Account': ['username', 'role', 'status'],
+          'Personal Details': ['full_name', 'email'],
+          'Membership': ['created_at'],
+        };
+        break;
+      case 'teacher':
+        groups = {
+          'Account': ['username', 'status'],
+          'Personal Details': ['full_name', 'age', 'email'],
+          'Contact': ['phone'],
+          'School': ['section'],
+          'Membership': ['created_at'],
+        };
+        break;
+      default:
+        groups = {
+          'Account': ['username', 'status'],
+          'Personal Details': ['full_name', 'age', 'email'],
+          'Contact': ['phone'],
+          'School': ['section', 'teacher_name'],
+          'Family': [
+            'father_name',
+            'father_phone',
+            'mother_name',
+            'mother_phone',
+            'guardian_phone'
+          ],
+          'Membership': ['created_at'],
+        };
+    }
     final widgets = <Widget>[];
     var index = 1;
     groups.forEach((title, keys) {
-      final rows = <(String, String)>[];
+      final rows = <(String, String, bool)>[];
       for (final k in keys) {
-        if (seen.contains(k)) continue;
-        final v = _value(k);
-        if (v.isNotEmpty) {
-          rows.add((_labels[k] ?? k, v));
-          seen.add(k);
-        }
+        rows.add((_labels[k] ?? k, _value(k), _isEmpty(k)));
       }
-      if (rows.isEmpty) return;
       widgets.add(FadeInSlide(
         index: index++,
         child: _groupCard(title, rows),
@@ -422,7 +442,8 @@ class _ProfilePageState extends State<ProfilePage> {
     return widgets;
   }
 
-  Widget _groupCard(String title, List<(String, String)> rows) {
+  Widget _groupCard(
+      String title, List<(String, String, bool)> rows) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -457,8 +478,12 @@ class _ProfilePageState extends State<ProfilePage> {
               child: Text(rows[i].$2,
                   style: GoogleFonts.poppins(
                       fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                      color: DashColors.ink)),
+                      fontWeight: rows[i].$3
+                          ? FontWeight.w500
+                          : FontWeight.w600,
+                      color: rows[i].$3
+                          ? Colors.grey.shade400
+                          : DashColors.ink)),
             ),
           ]),
           if (i < rows.length - 1) ...[

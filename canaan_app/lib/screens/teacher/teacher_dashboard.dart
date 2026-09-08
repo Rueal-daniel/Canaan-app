@@ -7,13 +7,18 @@ import '../../widgets/animations.dart';
 import '../../widgets/app_sidebar.dart';
 import '../../widgets/dashboard_design.dart';
 import '../../services/auth_service.dart';
+import '../../services/download_center_service.dart';
 import '../../services/notice_service.dart';
+import '../../services/notification_navigation.dart';
+import '../../services/seen_store.dart';
 import '../../services/session_service.dart';
+import '../../widgets/notification_bell.dart';
 import '../admin/student_management.dart';
 import '../login_screen.dart';
 import 'download_center.dart';
 import 'lesson_plan.dart';
 import 'notice_board.dart';
+import 'student_applications.dart';
 import 'memory_verse.dart';
 import 'my_attendance.dart';
 
@@ -43,26 +48,70 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
   int _lessonPlanCount = 0;
   int _notificationCount = 0;
   int _noticeUnread = 0;
+  int _verseUnread = 0;
+  int _lessonUnread = 0;
+  int _dcUnread = 0;
+  int _sentAppUnread = 0;
   bool _isLoading = true;
   Timer? _suspensionTimer;
+  String _notifUserId = '';
+  final List<StreamSubscription> _realtimeSubs = [];
 
   @override
   void initState() {
     super.initState();
     _fetchData();
+    _loadNotifIdentity();
     // Suspended mid-session → sign out to Login with notice.
     _guardSuspension();
     _suspensionTimer = Timer.periodic(
       const Duration(seconds: 60),
       (_) => _guardSuspension(),
     );
-    _client.from('students').stream(primaryKey: ['id']).listen((_) => _fetchData());
+    _realtimeSubs.add(_client
+        .from('students')
+        .stream(primaryKey: ['id'])
+        .listen((_) => _fetchData()));
+    // Live badge refresh for anything new.
+    for (final t in [
+      'memory_verses',
+      'lesson_plans',
+      'download_center',
+      'student_leave_applications',
+      'notices',
+    ]) {
+      try {
+        _realtimeSubs.add(_client
+            .from(t)
+            .stream(primaryKey: ['id'])
+            .listen((_) {
+              if (mounted) _loadBadges(_teacherSection);
+            }));
+      } catch (_) {}
+    }
   }
 
   @override
   void dispose() {
     _suspensionTimer?.cancel();
+    for (final s in _realtimeSubs) {
+      s.cancel();
+    }
     super.dispose();
+  }
+
+  /// Resolves the logged-in teacher's row id for the notification bell.
+  Future<void> _loadNotifIdentity() async {
+    try {
+      final session = await SessionService.getSession();
+      if (!mounted) return;
+      final role = (session?.role ?? '').trim().toLowerCase();
+      if (session != null &&
+          role == UserRole.teacher.name &&
+          session.userId.isNotEmpty) {
+        setState(() => _notifUserId = session.userId);
+      }
+    } catch (_) {}
   }
 
   Future<void> _guardSuspension() async {
@@ -187,12 +236,116 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
           _lessonPlanCount = lessonCount;
           _notificationCount = notifCount;
           _isLoading = false;
+          // Authoritative bell identity: the id resolved from the
+          // teachers table itself (the saved session may belong to
+          // another role's last login on shared devices).
+          if (teacherId != null && teacherId.isNotEmpty) {
+            _notifUserId = teacherId;
+          }
         });
         _loadNoticeUnread();
+        _loadBadges(section);
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Red number badges: anything new since the teacher last opened it.
+  Future<void> _loadBadges(String? section) async {
+    if (section == null || section.isEmpty || !mounted) return;
+    try {
+      final results = await Future.wait([
+        () async {
+          try {
+            final rows = await _client
+                .from('memory_verses')
+                .select('id')
+                .eq('section', section);
+            return (rows as List)
+                .map((r) => (r as Map)['id'].toString())
+                .toList();
+          } catch (_) {
+            return <String>[];
+          }
+        }(),
+        () async {
+          try {
+            final rows = await _client
+                .from('lesson_plans')
+                .select('id')
+                .eq('grade', section)
+                .eq('status', 'published');
+            return (rows as List)
+                .map((r) => (r as Map)['id'].toString())
+                .toList();
+          } catch (_) {
+            try {
+              final rows = await _client
+                  .from('lesson_plans')
+                  .select('id')
+                  .eq('grade', section);
+              return (rows as List)
+                  .map((r) => (r as Map)['id'].toString())
+                  .toList();
+            } catch (_) {
+              return <String>[];
+            }
+          }
+        }(),
+        () async {
+          try {
+            final rows = await _client
+                .from('download_center')
+                .select('id')
+                .inFilter(
+                    'audience',
+                    DownloadCenterService.visibleAudiencesFor(
+                        'teacher'));
+            return (rows as List)
+                .map((r) => (r as Map)['id'].toString())
+                .toList();
+          } catch (_) {
+            try {
+              final rows =
+                  await _client.from('download_center').select('id');
+              return (rows as List)
+                  .map((r) => (r as Map)['id'].toString())
+                  .toList();
+            } catch (_) {
+              return <String>[];
+            }
+          }
+        }(),
+        () async {
+          try {
+            final rows = await _client
+                .from('student_leave_applications')
+                .select('id')
+                .eq('section', section)
+                .eq('sent_to_teacher', true);
+            return (rows as List)
+                .map((r) => (r as Map)['id'].toString())
+                .toList();
+          } catch (_) {
+            return <String>[];
+          }
+        }(),
+      ]);
+      final seen = await Future.wait([
+        SeenStore.getSeen('seen_teacher_verses'),
+        SeenStore.getSeen('seen_teacher_lessons'),
+        SeenStore.getSeen('seen_teacher_downloads'),
+        SeenStore.getSeen('seen_teacher_sentapps'),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _verseUnread = SeenStore.unseenCount(results[0], seen[0]);
+        _lessonUnread = SeenStore.unseenCount(results[1], seen[1]);
+        _dcUnread = SeenStore.unseenCount(results[2], seen[2]);
+        _sentAppUnread = SeenStore.unseenCount(results[3], seen[3]);
+      });
+    } catch (_) {}
   }
 
   /// Unread notice count for the Notice Board quick-link badge.
@@ -265,12 +418,12 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
     );
   }
 
-  void _openMemoryVerse() {
+  Future<void> _openMemoryVerse() async {
     if (_teacherSection == null || _teacherSection!.isEmpty) {
       _deny('No section assigned yet');
       return;
     }
-    Navigator.push(
+    await Navigator.push(
       context,
       SlidePageRoute(
         page: TeacherMemoryVerse(
@@ -280,14 +433,28 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
         ),
       ),
     );
+    if (mounted) _loadBadges(_teacherSection);
   }
 
-  void _openLessonPlan() {
+  Future<void> _openStudentApplications() {
     if (_teacherSection == null || _teacherSection!.isEmpty) {
       _deny('No section assigned yet');
-      return;
+      return Future.value();
     }
-    Navigator.push(
+    return Navigator.push(
+      context,
+      SlidePageRoute(
+        page: TeacherStudentApplicationsPage(section: _teacherSection!),
+      ),
+    );
+  }
+
+  Future<void> _openLessonPlan() {
+    if (_teacherSection == null || _teacherSection!.isEmpty) {
+      _deny('No section assigned yet');
+      return Future.value();
+    }
+    return Navigator.push(
       context,
       SlidePageRoute(
         page: TeacherLessonPlanPage(
@@ -340,6 +507,23 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                 ),
               ),
               actions: [
+                NotificationBell(
+                  userId: _notifUserId,
+                  role: 'teacher',
+                  gradient: DashColors.teacherGradient,
+                  onNotificationTap: (n) =>
+                      NotificationNavigation.handleTap(
+                    context,
+                    role: 'teacher',
+                    notification: n,
+                    fullName: _teacherName ?? widget.fullName,
+                    section: _teacherSection,
+                    teacherId: (_teacherId != null && _teacherId!.isNotEmpty)
+                        ? _teacherId!
+                        : _notifUserId,
+                    teacherName: _teacherName ?? widget.fullName,
+                  ),
+                ),
                 IconButton(
                   icon: const Icon(Icons.logout_rounded),
                   color: Colors.white,
@@ -390,6 +574,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                                   subtitle: 'This section',
                                   icon: Icons.menu_book_outlined,
                                   color: const Color(0xFF22C55E),
+                                  badge: SeenStore.badgeFor(_verseUnread),
                                   onTap: _openMemoryVerse,
                                 ),
                                 DashStat(
@@ -398,7 +583,9 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                                   subtitle: 'Published',
                                   icon: Icons.description_outlined,
                                   color: const Color(0xFFFF9F0A),
-                                  onTap: _openLessonPlan,
+                                  badge: SeenStore.badgeFor(_lessonUnread),
+                                  onTap: () => _openLessonPlan().then((_) =>
+                                      _loadBadges(_teacherSection)),
                                 ),
                                 DashStat(
                                   label: 'Notifications',
@@ -448,7 +635,9 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                               subtitle: 'View $sectionLabel lesson plan',
                               color: const Color(0xFFFF9F0A),
                               colorEnd: const Color(0xFFFFB74D),
-                              onTap: _openLessonPlan,
+                              badge: SeenStore.badgeFor(_lessonUnread),
+                              onTap: () => _openLessonPlan().then((_) =>
+                                  _loadBadges(_teacherSection)),
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -460,11 +649,13 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                               subtitle: 'Resources shared with you',
                               color: const Color(0xFF1565C0),
                               colorEnd: const Color(0xFF42A5F5),
+                              badge: SeenStore.badgeFor(_dcUnread),
                               onTap: () => Navigator.push(
                                   context,
                                   SlidePageRoute(
                                       page:
-                                          const TeacherDownloadCenterPage())),
+                                          const TeacherDownloadCenterPage())).then(
+                                  (_) => _loadBadges(_teacherSection)),
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -488,6 +679,21 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                                             widget.fullName,
                                       ))).then(
                                   (_) => _loadNoticeUnread()),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 8,
+                            child: DashQuickLink(
+                              icon: Icons.event_note_rounded,
+                              title: 'Student Applications',
+                              subtitle:
+                                  'Leave applications sent for $sectionLabel',
+                              color: const Color(0xFF0E9F6E),
+                              colorEnd: const Color(0xFF34D399),
+                              badge: SeenStore.badgeFor(_sentAppUnread),
+                              onTap: () => _openStudentApplications().then(
+                                  (_) => _loadBadges(_teacherSection)),
                             ),
                           ),
                           const SizedBox(height: 8),

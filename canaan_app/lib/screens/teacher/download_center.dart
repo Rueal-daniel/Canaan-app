@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/download_center_service.dart';
+import '../../services/seen_store.dart';
 import '../../widgets/animations.dart';
 
 /// Teacher Dashboard → Quick Links → Download Center.
@@ -122,6 +123,8 @@ class _TeacherDownloadCenterPageState
           _isLoading = false;
           _loadError = null;
         });
+        SeenStore.markSeen('seen_teacher_downloads',
+            items.map((p) => (p['id'] ?? '').toString()));
       }
     } catch (e) {
       if (mounted) {

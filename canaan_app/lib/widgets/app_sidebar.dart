@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'about_canaan.dart';
+import '../screens/change_credentials_page.dart';
 import '../screens/profile_page.dart';
 import 'dashboard_design.dart' show dashInitials;
 
@@ -138,7 +139,7 @@ class CanaanSidebar extends StatelessWidget {
             ),
             // -- Profile: this person's full details ---------------------------
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
               child: _SidebarButton(
                 icon: Icons.person_rounded,
                 label: 'Profile',
@@ -158,6 +159,30 @@ class CanaanSidebar extends StatelessWidget {
                 },
               ),
             ),
+            // -- Change Credentials (teacher & student only) --------------------
+            if (role == 'teacher' || role == 'student')
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+                child: _SidebarButton(
+                  icon: Icons.manage_accounts_rounded,
+                  label: 'Change Credentials',
+                  gradient: const [Color(0xFFB45309), Color(0xFFF59E0B)],
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChangeCredentialsPage(
+                          role: role,
+                          fullName: fullName,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              )
+            else
+              const SizedBox(height: 14),
           ],
         ),
       ),

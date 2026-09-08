@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../services/notification_service.dart';
 import '../services/password_reset_service.dart';
 import '../widgets/animations.dart';
 import 'recovery_chatbot_page.dart';
@@ -77,7 +78,32 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
         'status': PasswordResetService.statusPending,
       };
       if (userId != null && userId.isNotEmpty) insert['user_id'] = userId;
-      await _client.from(PasswordResetService.table).insert(insert);
+      int? requestId;
+      try {
+        final created = await _client
+            .from(PasswordResetService.table)
+            .insert(insert)
+            .select('id')
+            .single();
+        requestId = (created['id'] as num?)?.toInt();
+      } catch (_) {
+        // Row may already exist despite the failed round-trip:
+        // recover its id instead of submitting a duplicate.
+        final recovered = await NotificationService.recoverNewestId(
+          table: PasswordResetService.table,
+          match: {'full_name': name},
+        );
+        requestId = int.tryParse(recovered);
+      }
+      // 🔔 Notify admins of the new request (fire-and-forget).
+      if (requestId != null) {
+        try {
+          NotificationService.passwordResetRequested(
+            requestId: requestId.toString(),
+            fullName: name,
+          );
+        } catch (_) {}
+      }
       if (!mounted) return;
       _nameController.clear();
       showDialog(

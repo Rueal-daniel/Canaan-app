@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../services/notification_service.dart';
 import '../../services/recitation_service.dart';
+import '../../services/seen_store.dart';
 import 'recitation.dart';
 
 /// Teacher → Student → Memory Verse.
@@ -108,6 +110,11 @@ class _TeacherMemoryVerseState extends State<TeacherMemoryVerse> {
           _verses = List<Map<String, dynamic>>.from(rows);
           _isLoading = false;
         });
+        // Dashboard badge: anything listed here counts as seen.
+        if (!_adminView) {
+          SeenStore.markSeen('seen_teacher_verses',
+              _verses.map((v) => (v['id'] ?? '').toString()));
+        }
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -292,17 +299,50 @@ class _TeacherMemoryVerseState extends State<TeacherMemoryVerse> {
       if (widget.teacherId.isNotEmpty) {
         payload['teacher_id'] = widget.teacherId;
       }
+      String newVerseId = '';
       try {
-        await _client.from('memory_verses').insert(payload);
+        final created = await _client
+            .from('memory_verses')
+            .insert(payload)
+            .select('id')
+            .single();
+        newVerseId = (created['id'] ?? '').toString();
       } catch (_) {
         // Retry without verse_reference if that column is missing.
         final fallback = Map<String, dynamic>.from(payload)
           ..remove('verse_reference');
-        await _client.from('memory_verses').insert(fallback);
+        try {
+          final created = await _client
+              .from('memory_verses')
+              .insert(fallback)
+              .select('id')
+              .single();
+          newVerseId = (created['id'] ?? '').toString();
+        } catch (_) {
+          // Row may already exist despite the failed round-trip:
+          // recover its id instead of submitting a duplicate.
+          if ((widget.section ?? '').isNotEmpty) {
+            newVerseId = await NotificationService.recoverNewestId(
+              table: 'memory_verses',
+              match: {'section': widget.section!},
+            );
+          }
+        }
       }
       _referenceController.clear();
       _verseController.clear();
       await _fetchVerses();
+      // 🔔 Notify students of the section (fire-and-forget).
+      if (!_adminView &&
+          newVerseId.isNotEmpty &&
+          (widget.section ?? '').isNotEmpty) {
+        try {
+          NotificationService.memoryVerseAdded(
+            verseId: newVerseId,
+            section: widget.section!,
+          );
+        } catch (_) {}
+      }
       _snack('Memory verse submitted.', Colors.green);
     } catch (e) {
       _snack('Could not submit. Please try again. ($e)', Colors.red);

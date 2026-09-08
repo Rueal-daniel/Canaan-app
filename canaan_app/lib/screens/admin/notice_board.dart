@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/notice_service.dart';
+import '../../services/notification_service.dart';
 import '../../services/session_service.dart';
 import '../../widgets/animations.dart';
 import '../../widgets/notice_rich_text.dart';
@@ -138,6 +139,10 @@ class _AdminNoticeBoardPageState extends State<AdminNoticeBoardPage> {
     try {
       final identity = await _adminIdentity();
       final now = DateTime.now().toIso8601String();
+      final isNew = _editingId == null;
+      int? newNoticeId;
+      final noticeTitle = _titleController.text.trim();
+      final noticeAudience = _audience;
       if (_editingId != null) {
         await _client.from(NoticeService.table).update({
           'title': _titleController.text.trim(),
@@ -160,16 +165,46 @@ class _AdminNoticeBoardPageState extends State<AdminNoticeBoardPage> {
           insert['created_by_id'] = identity['id'];
         }
         try {
-          await _client.from(NoticeService.table).insert(insert);
+          final created = await _client
+              .from(NoticeService.table)
+              .insert(insert)
+              .select('id')
+              .single();
+          newNoticeId = (created['id'] as num?)?.toInt();
         } catch (_) {
           // created_by_id type may differ — retry without it.
           insert.remove('created_by_id');
-          await _client.from(NoticeService.table).insert(insert);
+          try {
+            final created = await _client
+                .from(NoticeService.table)
+                .insert(insert)
+                .select('id')
+                .single();
+            newNoticeId = (created['id'] as num?)?.toInt();
+          } catch (_) {
+            // Row may already exist despite the failed round-trip:
+            // recover its id instead of publishing a duplicate.
+            final recovered = await NotificationService.recoverNewestId(
+              table: NoticeService.table,
+              match: {'title': noticeTitle},
+            );
+            newNoticeId = int.tryParse(recovered);
+          }
         }
         _snack('✅ Notice published successfully!', Colors.green);
       }
       _resetForm();
       await _fetchNotices(silent: true);
+      // 🔔 Fan out to the notice audience (new notices only, no edit spam).
+      if (isNew && newNoticeId != null) {
+        try {
+          NotificationService.noticePublished(
+            noticeId: newNoticeId.toString(),
+            noticeTitle: noticeTitle,
+            audience: noticeAudience,
+          );
+        } catch (_) {}
+      }
     } catch (e) {
       _snack('Could not publish. Please try again. ($e)', Colors.red);
     } finally {
