@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/welcome_audio.dart';
 import '../widgets/animations.dart';
 import 'login_screen.dart';
 
@@ -33,7 +33,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   bool _musicStarted = false;
   Timer? _typingTimer;
   Timer? _fadeTimer;
-  AudioPlayer? _player;
+  WelcomeAudio? _player;
 
   late final AnimationController _arrowController;
   late final Animation<Offset> _arrowSlide;
@@ -86,25 +86,18 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
   Future<void> ensureMusic() async {
     if (_leaving || !mounted) return;
-    // Browser autoplay may leave the player paused: resume on tap.
+    // Music paused or blocked by browser autoplay: resume on tap.
     final existing = _player;
     if (existing != null) {
-      try {
-        if (existing.state != PlayerState.playing) {
-          await existing.setVolume(_musicVolume);
-          await existing.resume();
-        }
-      } catch (_) {}
+      await existing.ensurePlaying(_musicVolume);
       return;
     }
     if (_musicStarted) return;
     _musicStarted = true;
     try {
-      final player = AudioPlayer();
-      _player = player;
-      await player.setVolume(_musicVolume);
-      await player.setReleaseMode(ReleaseMode.loop);
-      await player.play(AssetSource(_musicAsset));
+      final audio = WelcomeAudio();
+      _player = audio;
+      await audio.play(asset: _musicAsset, volume: _musicVolume);
     } catch (_) {
       _player = null;
       _musicStarted = false;
