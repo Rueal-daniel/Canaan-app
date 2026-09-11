@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/language_service.dart';
 import '../../widgets/animations.dart';
 import '../teacher/memory_verse.dart';
 import '../teacher/std_attendance.dart';
@@ -11,6 +12,8 @@ import 'student_details.dart';
 import 'add_student.dart';
 import 'leave_applications.dart';
 import 'student_applications.dart';
+import 'student_id_cards.dart';
+import 'student_progress.dart';
 
 class StudentManagement extends StatelessWidget {
   final String? lockedSection;
@@ -49,7 +52,9 @@ class StudentManagement extends StatelessWidget {
           ),
         ),
         title: Text(
-          isLocked ? '$sectionLabel Students' : 'Student Management',
+          isLocked
+              ? trp('opt_view_sec_students', {'s': sectionLabel})
+              : tr('hub_student_mgmt'),
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.w600,
             color: Colors.white,
@@ -57,13 +62,14 @@ class StudentManagement extends StatelessWidget {
         ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: SingleChildScrollView(
+      body: LangBuilder(
+        builder: (_) => SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isLocked ? 'My Section' : 'Student Section',
+              isLocked ? tr('hub_my_section') : tr('hub_student_section'),
               style: GoogleFonts.poppins(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -76,8 +82,8 @@ class StudentManagement extends StatelessWidget {
                 index: 0,
                 child: _OptionCard(
                   icon: Icons.person_add_rounded,
-                  title: 'Add Student',
-                  subtitle: 'Add a new student to the system',
+                  title: tr('opt_add_student'),
+                  subtitle: tr('opt_add_student_sub'),
                   gradient: const LinearGradient(
                     colors: [Color(0xFF43A047), Color(0xFF66BB6A)],
                   ),
@@ -94,10 +100,10 @@ class StudentManagement extends StatelessWidget {
               index: isLocked ? 0 : 1,
               child: _OptionCard(
                 icon: Icons.people_rounded,
-                title: 'Student Details',
+                title: tr('opt_student_details'),
                 subtitle: isLocked
-                    ? 'View $sectionLabel students'
-                    : 'View all students by section',
+                    ? trp('opt_view_sec_students', {'s': sectionLabel})
+                    : tr('opt_view_all_sec'),
                 gradient: const LinearGradient(
                   colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
                 ),
@@ -120,8 +126,8 @@ class StudentManagement extends StatelessWidget {
                 index: 1,
                 child: _OptionCard(
                   icon: Icons.fact_check_rounded,
-                  title: 'Student Attendance',
-                  subtitle: 'Mark Saturday attendance',
+                  title: tr('opt_std_att'),
+                  subtitle: tr('opt_mark_sat'),
                   gradient: const LinearGradient(
                     colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
                   ),
@@ -145,8 +151,9 @@ class StudentManagement extends StatelessWidget {
                 index: 2,
                 child: _OptionCard(
                   icon: Icons.menu_book_rounded,
-                  title: 'Memory Verse',
-                  subtitle: 'Add verses for $sectionLabel',
+                  title: tr('nav_memory_verse'),
+                  subtitle: trp('opt_add_verses_for',
+                      {'s': sectionLabel}),
                   gradient: const LinearGradient(
                     colors: [Color(0xFF22C55E), Color(0xFF4ADE80)],
                   ),
@@ -164,14 +171,37 @@ class StudentManagement extends StatelessWidget {
                   },
                 ),
               ),
+            if (isLocked) const SizedBox(height: 12),
+            if (isLocked)
+              FadeInSlide(
+                index: 3,
+                child: _OptionCard(
+                  icon: Icons.badge_rounded,
+                  title: tr('nav_id_cards'),
+                  subtitle: trp('opt_view_id_for',
+                      {'s': sectionLabel}),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0B2A5B), Color(0xFF42A5F5)],
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      SlidePageRoute(
+                        page: StudentIdCardsPage(
+                            lockedSection: lockedSection),
+                      ),
+                    );
+                  },
+                ),
+              ),
             if (!isLocked) const SizedBox(height: 12),
             if (!isLocked)
               FadeInSlide(
                 index: 2,
                 child: _OptionCard(
                   icon: Icons.assignment_rounded,
-                  title: 'Student Attendance Reports',
-                  subtitle: 'Review teacher attendance reports',
+                  title: tr('opt_std_att_reports'),
+                  subtitle: tr('opt_review_att_reports'),
                   gradient: const LinearGradient(
                     colors: [Color(0xFF7B1FA2), Color(0xFFAB47BC)],
                   ),
@@ -189,8 +219,8 @@ class StudentManagement extends StatelessWidget {
                 index: 3,
                 child: _OptionCard(
                   icon: Icons.no_accounts_rounded,
-                  title: 'Student Suspension',
-                  subtitle: 'Suspend or restore student access',
+                  title: tr('opt_std_susp'),
+                  subtitle: tr('opt_susp_std_sub'),
                   gradient: const LinearGradient(
                     colors: [Color(0xFFD32F2F), Color(0xFFEF5350)],
                   ),
@@ -208,8 +238,8 @@ class StudentManagement extends StatelessWidget {
                 index: 4,
                 child: _OptionCard(
                   icon: Icons.add_a_photo_rounded,
-                  title: 'Student Photo',
-                  subtitle: 'Upload student profile photos',
+                  title: tr('opt_std_photo'),
+                  subtitle: tr('opt_std_photo_sub'),
                   gradient: const LinearGradient(
                     colors: [Color(0xFF00897B), Color(0xFF4DB6AC)],
                   ),
@@ -227,8 +257,8 @@ class StudentManagement extends StatelessWidget {
                 index: 5,
                 child: _OptionCard(
                   icon: Icons.menu_book_rounded,
-                  title: 'Memory Verses',
-                  subtitle: 'View all section memory verses',
+                  title: tr('nav_memory_verses'),
+                  subtitle: tr('opt_mem_verses_sub'),
                   gradient: const LinearGradient(
                     colors: [Color(0xFF22C55E), Color(0xFF4ADE80)],
                   ),
@@ -248,8 +278,8 @@ class StudentManagement extends StatelessWidget {
                 index: 6,
                 child: _OptionCard(
                   icon: Icons.fact_check_rounded,
-                  title: 'Memory Verse Reports',
-                  subtitle: 'Review recitation reports',
+                  title: tr('opt_mem_reports'),
+                  subtitle: tr('opt_mem_reports_sub'),
                   gradient: const LinearGradient(
                     colors: [Color(0xFF7B1FA2), Color(0xFFAB47BC)],
                   ),
@@ -269,8 +299,8 @@ class StudentManagement extends StatelessWidget {
                 index: 7,
                 child: _OptionCard(
                   icon: Icons.event_note_rounded,
-                  title: 'Leave Application',
-                  subtitle: 'Review student leave applications',
+                  title: tr('nav_leave'),
+                  subtitle: tr('opt_review_leave'),
                   gradient: const LinearGradient(
                     colors: [Color(0xFF0E9F6E), Color(0xFF34D399)],
                   ),
@@ -290,8 +320,8 @@ class StudentManagement extends StatelessWidget {
                 index: 8,
                 child: _OptionCard(
                   icon: Icons.send_rounded,
-                  title: 'Student Application',
-                  subtitle: 'Applications sent to teachers',
+                  title: tr('opt_std_app'),
+                  subtitle: tr('opt_std_app_sub'),
                   gradient: const LinearGradient(
                     colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
                   ),
@@ -305,8 +335,51 @@ class StudentManagement extends StatelessWidget {
                   },
                 ),
               ),
+            if (!isLocked) const SizedBox(height: 12),
+            if (!isLocked)
+              FadeInSlide(
+                index: 9,
+                child: _OptionCard(
+                  icon: Icons.insights_rounded,
+                  title: tr('nav_progress'),
+                  subtitle: tr('opt_eval_sub'),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF6D28D9), Color(0xFFA78BFA)],
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      SlidePageRoute(
+                        page: const AdminStudentProgressPage(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            if (!isLocked) const SizedBox(height: 12),
+            if (!isLocked)
+              FadeInSlide(
+                index: 10,
+                child: _OptionCard(
+                  icon: Icons.badge_rounded,
+                  title: tr('nav_id_cards'),
+                  subtitle: tr('opt_id_sub'),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0B2A5B), Color(0xFF42A5F5)],
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      SlidePageRoute(
+                        page: const StudentIdCardsPage(),
+                      ),
+                    );
+                  },
+                ),
+              ),
           ],
         ),
+      ),
       ),
     );
   }

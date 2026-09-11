@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/auth_service.dart';
+import '../services/language_service.dart';
 import '../screens/login_screen.dart';
 
 /// Shared professional design system for the Admin, Teacher and
@@ -35,10 +36,15 @@ class DashColors {
 
 /// Time-aware greeting: Good morning / Good afternoon / Good evening.
 String dashGreeting() {
+  return tr(dashGreetingKey());
+}
+
+/// Translation key for the current part of day (for `tr()`).
+String dashGreetingKey() {
   final h = DateTime.now().hour;
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
+  if (h < 12) return 'greet_morning';
+  if (h < 17) return 'greet_afternoon';
+  return 'greet_evening';
 }
 
 /// `Saturday, September 5, 2026`.
@@ -63,8 +69,10 @@ String dashInitials(String name) {
 
 String dashPrettySection(String? section) {
   final s = (section ?? '').trim().toLowerCase();
-  if (s.isEmpty) return 'Not Assigned';
-  if (s == 'sub-junior' || s == 'sub junior') return 'Sub Junior';
+  if (s.isEmpty) return tr('sec_na');
+  if (s == 'sub-junior' || s == 'sub junior') return tr('sec_sub');
+  if (s == 'junior') return tr('sec_jun');
+  if (s == 'senior') return tr('sec_sen');
   return s[0].toUpperCase() + s.substring(1);
 }
 
@@ -74,16 +82,16 @@ Future<void> confirmLogout(BuildContext context) async {
     context: context,
     builder: (ctx) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Text('Log out?',
+      title: Text(tr('out_title'),
           style:
               GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 17)),
-      content: Text('Are you sure you want to log out of Canaan?',
+      content: Text(tr('out_msg'),
           style:
               GoogleFonts.poppins(fontSize: 14, color: Colors.grey.shade600)),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx, false),
-          child: Text('Stay',
+          child: Text(tr('out_stay'),
               style: GoogleFonts.poppins(color: Colors.grey.shade600)),
         ),
         ElevatedButton(
@@ -95,7 +103,7 @@ Future<void> confirmLogout(BuildContext context) async {
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             elevation: 0,
           ),
-          child: Text('Log out',
+          child: Text(tr('out_go'),
               style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
         ),
       ],

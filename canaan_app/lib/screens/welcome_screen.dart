@@ -31,6 +31,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   bool _typingDone = false;
   bool _leaving = false;
   bool _musicStarted = false;
+  bool _soundOn = false;
   Timer? _typingTimer;
   Timer? _fadeTimer;
   WelcomeAudio? _player;
@@ -309,10 +310,52 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                   padding:
                       const EdgeInsets.fromLTRB(28, 8, 28, 24),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      // Browsers block audible autoplay until a gesture:
+                      // this starts the music WITHOUT leaving the page.
                       GestureDetector(
-                        onTap: _finish,
+                        onTap: () async {
+                          await ensureMusic();
+                          if (mounted) {
+                            setState(() => _soundOn = true);
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: _soundOn
+                                ? const Color(0xFF1565C0)
+                                    .withValues(alpha: 0.12)
+                                : Colors.white,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFF1565C0)
+                                  .withValues(alpha: 0.3),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black
+                                    .withValues(alpha: 0.05),
+                                blurRadius: 10,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            _soundOn
+                                ? Icons.volume_up_rounded
+                                : Icons.volume_off_rounded,
+                            color: const Color(0xFF1565C0),
+                            size: 26,
+                          ),
+                        ),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          GestureDetector(
+                            onTap: _finish,
                         child: Text('Continue to Login',
                             style: GoogleFonts.poppins(
                                 fontSize: 16,
@@ -338,6 +381,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                 color: Colors.white, size: 28),
                           ),
                         ),
+                      ),
+                        ],
                       ),
                     ],
                   ),

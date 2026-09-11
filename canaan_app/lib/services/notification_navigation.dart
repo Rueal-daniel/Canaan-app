@@ -24,6 +24,8 @@ import '../screens/teacher/memory_verse.dart';
 import '../screens/teacher/my_attendance.dart';
 import '../screens/teacher/notice_board.dart';
 import '../screens/teacher/student_applications.dart';
+import '../screens/teacher/teacher_tasks.dart';
+import '../screens/admin/teacher_tasks.dart';
 
 /// Resolves a notification's [destination] key to the EXISTING
 /// dashboard page for the current role. No duplicate pages are created:
@@ -163,6 +165,24 @@ class NotificationNavigation {
           page = const TeacherDownloadCenterPage();
         } else {
           page = AdminDownloadCenterPage(adminName: aname);
+        }
+        break;
+      case NotificationService.destTeacherTasks:
+        if (r == 'teacher') {
+          if (tid.isEmpty) {
+            _deny(context, 'Could not identify teacher account');
+            return;
+          }
+          page = TeacherTasksPage(
+            teacherId: tid,
+            teacherName: tname,
+            section: sec,
+          );
+        }
+        break;
+      case NotificationService.destTeacherTasksAdmin:
+        if (r == 'admin') {
+          page = AdminTeacherTasksPage(adminName: aname);
         }
         break;
       default:

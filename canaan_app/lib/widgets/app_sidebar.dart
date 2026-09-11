@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'about_canaan.dart';
 import '../screens/change_credentials_page.dart';
 import '../screens/profile_page.dart';
+import '../screens/settings_page.dart';
+import '../screens/student/my_student_id.dart';
+import '../services/language_service.dart';
 import 'dashboard_design.dart' show dashInitials;
 
 /// Common dashboard drawer for Admin / Teacher / Student.
@@ -11,7 +15,11 @@ import 'dashboard_design.dart' show dashInitials;
 /// Holds ONLY the profile box on top and the About Canaan button —
 /// no navigation items. The dashboard body behind it is left
 /// completely untouched.
-class CanaanSidebar extends StatelessWidget {
+///
+/// The profile box also shows the person's permanent ID number
+/// (C-… / T-… / A-…) fetched from their own table row. Students can
+/// tap it to open their digital ID card.
+class CanaanSidebar extends StatefulWidget {
   final List<Color> gradient;
   final String fullName;
   final String roleLabel;
@@ -20,6 +28,9 @@ class CanaanSidebar extends StatelessWidget {
   /// Profile button loads.
   final String role;
   final String? photoUrl;
+
+  /// Supabase row id of this person — used to load their ID number.
+  final String userId;
   const CanaanSidebar({
     super.key,
     required this.gradient,
@@ -27,11 +38,88 @@ class CanaanSidebar extends StatelessWidget {
     required this.roleLabel,
     required this.role,
     this.photoUrl,
+    this.userId = '',
   });
 
   @override
+  State<CanaanSidebar> createState() => _CanaanSidebarState();
+}
+
+class _CanaanSidebarState extends State<CanaanSidebar> {
+  String _idNumber = '';
+
+  String get _role => widget.role.trim().toLowerCase();
+
+  String get _roleLabel {
+    switch (_role) {
+      case 'teacher':
+        return tr('role_teacher');
+      case 'admin':
+        return tr('role_admin');
+      default:
+        return tr('role_student');
+    }
+  }
+
+  // Pass-throughs so the shared build code below stays untouched.
+  List<Color> get gradient => widget.gradient;
+  String get fullName => widget.fullName;
+  String get roleLabel => widget.roleLabel;
+  String get role => widget.role;
+  String? get photoUrl => widget.photoUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchIdNumber();
+  }
+
+  @override
+  void didUpdateWidget(CanaanSidebar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.userId != oldWidget.userId ||
+        widget.role != oldWidget.role) {
+      _fetchIdNumber();
+    }
+  }
+
+  Future<void> _fetchIdNumber() async {
+    // Students only — teachers/admins have no ID chip.
+    if (_role != 'student') return;
+    final userId = widget.userId.trim();
+    if (userId.isEmpty) return;
+    try {
+      final row = await Supabase.instance.client
+          .from('students')
+          .select('student_id_number')
+          .eq('id', userId)
+          .maybeSingle();
+      if (!mounted) return;
+      final id = (row?['student_id_number'] ?? '').toString().trim();
+      if (id.isNotEmpty) setState(() => _idNumber = id);
+    } catch (_) {
+      // No ID column yet / no row — the chip simply stays hidden.
+    }
+  }
+
+  void _openMyId() {
+    // Only students open a card from here; staff manage IDs from
+    // the Students section (Admin) where generation lives.
+    if (_role != 'student') return;
+    Navigator.pop(context);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            MyStudentIdPage(fullName: widget.fullName),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Drawer(
+    return LangBuilder(
+      builder: (_) => Drawer(
       backgroundColor: const Color(0xFFF4F6FB),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.horizontal(right: Radius.circular(24)),
@@ -40,7 +128,10 @@ class CanaanSidebar extends StatelessWidget {
         child: Column(
           children: [
             // -- modern rounded profile box ----------------------------------
-            Container(
+            // Students can tap it to open their digital ID card.
+            GestureDetector(
+              onTap: _role == 'student' ? _openMyId : null,
+              child: Container(
               width: double.infinity,
               margin: const EdgeInsets.fromLTRB(14, 14, 14, 6),
               padding: const EdgeInsets.symmetric(
@@ -114,22 +205,49 @@ class CanaanSidebar extends StatelessWidget {
                                 color: Colors.white
                                     .withValues(alpha: 0.25)),
                           ),
-                          child: Text(roleLabel,
+                          child: Text(_roleLabel,
                               style: GoogleFonts.poppins(
                                   fontSize: 11.5,
                                   fontWeight: FontWeight.w600,
                                   color: Colors.white)),
                         ),
+                        // Permanent Student ID number (students only).
+                        if (_role == 'student' &&
+                            widget.userId.trim().isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.white
+                                  .withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: Colors.white
+                                      .withValues(alpha: 0.25)),
+                            ),
+                            child: Text(
+                              _idNumber.isEmpty
+                                  ? 'ID  PENDING'
+                                  : 'ID  $_idNumber',
+                              style: GoogleFonts.poppins(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1,
+                                  color: Colors.white)),
+                          ),
+                        ],
                       ]),
                 ),
               ]),
+              ),
             ),
             // -- About Canaan, right below the profile box --------------------
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
               child: _SidebarButton(
                 icon: Icons.church_rounded,
-                label: 'About Canaan',
+                label: tr('nav_about'),
                 gradient: const [Color(0xFF0B2A5B), Color(0xFF1565C0)],
                 onTap: () {
                   Navigator.pop(context);
@@ -142,7 +260,7 @@ class CanaanSidebar extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
               child: _SidebarButton(
                 icon: Icons.person_rounded,
-                label: 'Profile',
+                label: tr('nav_profile'),
                 gradient: const [Color(0xFF065F46), Color(0xFF10B981)],
                 onTap: () {
                   Navigator.pop(context);
@@ -162,10 +280,10 @@ class CanaanSidebar extends StatelessWidget {
             // -- Change Credentials (teacher & student only) --------------------
             if (role == 'teacher' || role == 'student')
               Padding(
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
                 child: _SidebarButton(
                   icon: Icons.manage_accounts_rounded,
-                  label: 'Change Credentials',
+                  label: tr('nav_change_credentials'),
                   gradient: const [Color(0xFFB45309), Color(0xFFF59E0B)],
                   onTap: () {
                     Navigator.pop(context);
@@ -182,10 +300,34 @@ class CanaanSidebar extends StatelessWidget {
                 ),
               )
             else
-              const SizedBox(height: 14),
+              const SizedBox.shrink(),
+            // -- Settings (Admin, Teacher & Student) ---------------------------
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+              child: _SidebarButton(
+                icon: Icons.settings_rounded,
+                label: tr('nav_settings'),
+                gradient: const [Color(0xFF4C1D95), Color(0xFF8B5CF6)],
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SettingsPage(
+                        role: role,
+                        userId: widget.userId,
+                        fullName: fullName,
+                        gradient: gradient,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
           ],
         ),
       ),
+    ),
     );
   }
 }

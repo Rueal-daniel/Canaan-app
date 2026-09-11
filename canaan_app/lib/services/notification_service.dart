@@ -1,6 +1,8 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../l10n/app_strings.dart';
+import 'language_service.dart';
 import 'session_service.dart';
 
 /// Central, event-based notification system for the Canaan app.
@@ -38,6 +40,7 @@ class NotificationService {
   static const typeStudentApplication = 'student_application';
   static const typeDownload = 'download';
   static const typeWebsiteUpdate = 'website_update';
+  static const typeTeacherTask = 'teacher_task';
 
   // -- audiences -------------------------------------------------------------
   static const audienceAll = 'all';
@@ -61,6 +64,8 @@ class NotificationService {
   static const destCredentialsAdmin = 'credentials_admin'; // admin requests
   static const destPasswordResetAdmin = 'password_reset_admin';
   static const destDownloadCenter = 'download_center';
+  static const destTeacherTasks = 'teacher_tasks'; // Teacher → Tasks
+  static const destTeacherTasksAdmin = 'teacher_tasks_admin'; // Admin
 
   static const _archiveLastRunKey = 'canaan_notif_archive_last_run';
   static const _archiveRetentionDays = 90;
@@ -94,7 +99,8 @@ class NotificationService {
             .from(recipientsTable)
             .select(
               'id,is_read,read_at,created_at,user_id,'
-              'notifications(id,type,title,message,related_id,destination,'
+              'notifications(id,type,title,message,title_ne,message_ne,'
+              'related_id,destination,'
               'audience_type,section,created_at,expires_at)',
             )
             .eq('user_id', userId)
@@ -135,7 +141,8 @@ class NotificationService {
       final events = await _client
           .from(eventsTable)
           .select(
-            'id,type,title,message,related_id,destination,'
+            'id,type,title,message,title_ne,message_ne,related_id,'
+            'destination,'
             'audience_type,section,created_at,expires_at',
           )
           .inFilter('id', ids);
@@ -214,6 +221,8 @@ class NotificationService {
     required String type,
     required String title,
     required String message,
+    String? titleNe,
+    String? messageNe,
     String? relatedId,
     String destination = destDashboard,
     String? audienceType,
@@ -236,10 +245,20 @@ class NotificationService {
             if ((row['title'] ?? '') != title ||
                 (row['message'] ?? '') != message) {
               try {
-                await _client.from(eventsTable).update({
+                final refresh = <String, dynamic>{
                   'title': title,
                   'message': message,
-                }).eq('id', id);
+                };
+                if (titleNe != null && titleNe.isNotEmpty) {
+                  refresh['title_ne'] = titleNe;
+                }
+                if (messageNe != null && messageNe.isNotEmpty) {
+                  refresh['message_ne'] = messageNe;
+                }
+                await _client
+                    .from(eventsTable)
+                    .update(refresh)
+                    .eq('id', id);
               } catch (_) {}
             }
             return id.isEmpty ? null : id;
@@ -251,12 +270,21 @@ class NotificationService {
         'title': title,
         'message': message,
         'destination': destination,
+        // Legacy column with a CHECK constraint — always send a safe
+        // value (see [legacyAudience]), never rely on the DB default.
+        'audience': legacyAudience(audienceType),
       };
       if (relatedId != null && relatedId.isNotEmpty) {
         payload['related_id'] = relatedId;
       }
       if (audienceType != null && audienceType.isNotEmpty) {
         payload['audience_type'] = audienceType;
+      }
+      if (titleNe != null && titleNe.isNotEmpty) {
+        payload['title_ne'] = titleNe;
+      }
+      if (messageNe != null && messageNe.isNotEmpty) {
+        payload['message_ne'] = messageNe;
       }
       if (section != null && section.isNotEmpty) {
         payload['section'] = section;
@@ -327,6 +355,8 @@ class NotificationService {
     required String type,
     required String title,
     required String message,
+    String? titleNe,
+    String? messageNe,
     String? relatedId,
     String destination = destDashboard,
     String audience = audienceAll,
@@ -340,6 +370,8 @@ class NotificationService {
         type: type,
         title: title,
         message: message,
+        titleNe: titleNe,
+        messageNe: messageNe,
         relatedId: relatedId,
         destination: destination,
         audienceType: audience,
@@ -365,6 +397,22 @@ class NotificationService {
       return 'sub-junior';
     }
     return s;
+  }
+
+  /// Legacy `notifications.audience` column has a CHECK constraint that
+  /// only allows a small set of values. Map every audience to a safe
+  /// legacy value so event inserts can never violate it.
+  static String legacyAudience(String? audience) {
+    switch ((audience ?? '').trim().toLowerCase()) {
+      case audienceStudents:
+      case 'student':
+        return 'students';
+      case audienceTeachers:
+      case 'teacher':
+        return 'teachers';
+      default:
+        return 'all';
+    }
   }
 
   /// Resolves user ids for an audience. Sections use the EXISTING
@@ -429,6 +477,19 @@ class NotificationService {
     return s[0].toUpperCase() + s.substring(1);
   }
 
+  static String prettyStatusNe(String? status) {
+    switch ((status ?? '').trim().toLowerCase()) {
+      case 'present':
+        return 'उपस्थित';
+      case 'absent':
+        return 'अनुपस्थित';
+      case 'late':
+        return 'ढिलो';
+      default:
+        return (status ?? '').trim();
+    }
+  }
+
   /// Teacher marked a student's attendance → that student.
   static Future<void> attendanceMarked({
     required String studentId,
@@ -445,6 +506,9 @@ class NotificationService {
       type: typeAttendance,
       title: 'Attendance Marked',
       message: 'Your attendance has been marked as $label.',
+      titleNe: 'हाजिरी चिन्ह लगाइयो',
+      messageNe:
+          'तपाईंको हाजिरी ${prettyStatusNe(status)} रूपमा चिन्ह लगाइएको छ।',
       relatedId: ref,
       destination: destAttendance,
       audience: audienceIndividual,
@@ -464,6 +528,9 @@ class NotificationService {
       type: typeAttendance,
       title: 'Attendance Updated',
       message: 'Your attendance has been marked as $label.',
+      titleNe: 'हाजिरी अद्यावधिक गरियो',
+      messageNe:
+          'तपाईंको हाजिरी ${prettyStatusNe(status)} रूपमा चिन्ह लगाइएको छ।',
       relatedId: 'teacher_attendance:$date:$teacherId',
       destination: destMyAttendance,
       audience: audienceIndividual,
@@ -485,6 +552,9 @@ class NotificationService {
       type: typeAttendance,
       title: 'New Attendance Report',
       message: 'A new student attendance report has been submitted ($label).',
+      titleNe: 'नयाँ हाजिरी प्रतिवेदन',
+      messageNe:
+          'नयाँ विद्यार्थी हाजिरी प्रतिवेदन पेश गरिएको छ ($label)।',
       relatedId: 'attendance_report:$reportId',
       destination: destStudentReports,
       audience: audienceAdmins,
@@ -509,6 +579,10 @@ class NotificationService {
       message: noticeTitle.trim().isEmpty
           ? 'A new notice has been published.'
           : 'A new notice "$noticeTitle" has been published.',
+      titleNe: 'नयाँ सूचना',
+      messageNe: noticeTitle.trim().isEmpty
+          ? 'नयाँ सूचना प्रकाशित गरिएको छ।'
+          : '"$noticeTitle" शीर्षकको नयाँ सूचना प्रकाशित गरिएको छ।',
       relatedId: 'notice:$noticeId',
       destination: destNoticeBoard,
       audience: resolved,
@@ -528,6 +602,10 @@ class NotificationService {
         message: studentName.trim().isEmpty
             ? 'A new student leave application has been submitted.'
             : 'A new student leave application has been submitted by $studentName.',
+        titleNe: 'नयाँ बिदा निवेदन',
+        messageNe: studentName.trim().isEmpty
+            ? 'नयाँ विद्यार्थी बिदा निवेदन पेश गरिएको छ।'
+            : '${studentName.trim()} द्वारा नयाँ विद्यार्थी बिदा निवेदन पेश गरिएको छ।',
         relatedId: 'leave:$applicationId',
         destination: destLeaveApplication,
         audience: audienceAdmins,
@@ -539,6 +617,9 @@ class NotificationService {
         title: 'Leave Application Submitted',
         message:
             'Your leave application has been submitted. Please wait for Admin approval.',
+        titleNe: 'बिदा निवेदन पेश गरियो',
+        messageNe:
+            'तपाईंको बिदा निवेदन पेश गरिएको छ। कृपया प्रशासकको स्वीकृतिका लागि पर्खनुहोस्।',
         relatedId: 'leave:$applicationId:self',
         destination: destLeaveApplication,
         audience: audienceIndividual,
@@ -561,6 +642,11 @@ class NotificationService {
       message: approved
           ? 'Your leave application has been successfully approved by Admin.'
           : 'Your leave application has been rejected by Admin.',
+      titleNe:
+          approved ? 'बिदा निवेदन स्वीकृत भयो' : 'बिदा निवेदन अस्वीकृत भयो',
+      messageNe: approved
+          ? 'तपाईंको बिदा निवेदन प्रशासकद्वारा सफलतापूर्वक स्वीकृत गरिएको छ।'
+          : 'तपाईंको बिदा निवेदन प्रशासकद्वारा अस्वीकृत गरिएको छ।',
       relatedId: 'leave:$applicationId:decision',
       destination: destLeaveApplication,
       audience: audienceIndividual,
@@ -578,6 +664,9 @@ class NotificationService {
       title: 'New Student Application',
       message:
           'A new approved student leave application has been sent to you.',
+      titleNe: 'नयाँ विद्यार्थी निवेदन',
+      messageNe:
+          'स्वीकृत भएको नयाँ विद्यार्थी बिदा निवेदन तपाईंलाई पठाइएको छ।',
       relatedId: 'leave:$applicationId:sent',
       destination: destStudentApplications,
       audience: audienceTeachers,
@@ -594,6 +683,9 @@ class NotificationService {
       type: typeLessonPlan,
       title: 'New Lesson Plan',
       message: 'A new lesson plan has been published for your section.',
+      titleNe: 'नयाँ पाठ योजना',
+      messageNe:
+          'तपाईंको कक्षाका लागि नयाँ पाठ योजना प्रकाशित गरिएको छ।',
       relatedId: 'lesson_plan:$lessonId',
       destination: destLessonPlan,
       audience: audienceSection,
@@ -610,6 +702,9 @@ class NotificationService {
       type: typeMemoryVerse,
       title: 'New Memory Verse',
       message: 'A new memory verse has been added for your section.',
+      titleNe: 'नयाँ स्मरण पद',
+      messageNe:
+          'तपाईंको कक्षाका लागि नयाँ स्मरण पद थपिएको छ।',
       relatedId: 'memory_verse:$verseId',
       destination: destMemoryVerse,
       audience: audienceStudents,
@@ -631,6 +726,9 @@ class NotificationService {
       message: label.isEmpty
           ? 'Your memory verse recitation status has been updated.'
           : 'Your memory verse recitation status has been updated to $label.',
+      titleNe: 'स्मरण पद अद्यावधिक गरियो',
+      messageNe:
+          'तपाईंको स्मरण पद वाचन स्थिति अद्यावधिक गरिएको छ।',
       relatedId: 'recitation:$verseId:$studentId',
       destination: destMemoryVerse,
       audience: audienceIndividual,
@@ -648,10 +746,18 @@ class NotificationService {
     final who = fullName.trim().isEmpty
         ? (role.trim().toLowerCase() == 'teacher' ? 'A Teacher' : 'A Student')
         : fullName.trim();
+    final whoNe = fullName.trim().isEmpty
+        ? (role.trim().toLowerCase() == 'teacher'
+            ? 'एक शिक्षक'
+            : 'एक विद्यार्थी')
+        : fullName.trim();
     return publish(
       type: typeAuthentication,
       title: 'New Credential Change Request',
       message: '$who has submitted a credential change request.',
+      titleNe: 'नयाँ प्रमाण परिवर्तन अनुरोध',
+      messageNe:
+          '$whoNe ले प्रमाण परिवर्तन अनुरोध पेश गर्नुभएको छ।',
       relatedId: 'credential:$requestId',
       destination: destCredentialsAdmin,
       audience: audienceAdmins,
@@ -672,6 +778,12 @@ class NotificationService {
       message: approved
           ? 'Admin has successfully approved your credential change request.'
           : 'Your credential change request has been rejected by Admin.',
+      titleNe: approved
+          ? 'प्रमाण परिवर्तन स्वीकृत भयो'
+          : 'प्रमाण परिवर्तन अस्वीकृत भयो',
+      messageNe: approved
+          ? 'प्रशासकले तपाईंको प्रमाण परिवर्तन अनुरोध सफलतापूर्वक स्वीकृत गर्नुभएको छ।'
+          : 'तपाईंको प्रमाण परिवर्तन अनुरोध प्रशासकद्वारा अस्वीकृत गरिएको छ।',
       relatedId: 'credential:$requestId:decision',
       destination: destCredentials,
       audience: audienceIndividual,
@@ -689,6 +801,9 @@ class NotificationService {
       type: typeAuthentication,
       title: 'New Password Reset Request',
       message: '$who has submitted a password reset request.',
+      titleNe: 'नयाँ पासवर्ड रिसेट अनुरोध',
+      messageNe:
+          '${fullName.trim().isEmpty ? 'कसैले' : fullName.trim()} पासवर्ड रिसेट अनुरोध पेश गर्नुभएको छ।',
       relatedId: 'password_reset:$requestId',
       destination: destPasswordResetAdmin,
       audience: audienceAdmins,
@@ -707,6 +822,12 @@ class NotificationService {
       message: approved
           ? 'Your password reset request has been approved. Please complete the next step within 30 minutes.'
           : 'Your password reset request has been rejected by Admin.',
+      titleNe: approved
+          ? 'पासवर्ड रिसेट स्वीकृत भयो'
+          : 'पासवर्ड रिसेट अस्वीकृत भयो',
+      messageNe: approved
+          ? 'तपाईंको पासवर्ड रिसेट अनुरोध स्वीकृत भएको छ। कृपया ३० मिनेटभित्र अर्को चरण पूरा गर्नुहोस्।'
+          : 'तपाईंको पासवर्ड रिसेट अनुरोध प्रशासकद्वारा अस्वीकृत गरिएको छ।',
       relatedId: 'password_reset:$requestId:decision',
       destination: destCredentials,
       audience: audienceIndividual,
@@ -732,6 +853,10 @@ class NotificationService {
       message: title.trim().isEmpty
           ? 'A new resource has been added to the Download Center.'
           : 'A new resource "$title" has been added to the Download Center.',
+      titleNe: 'नयाँ स्रोत उपलब्ध छ',
+      messageNe: title.trim().isEmpty
+          ? 'डाउनलोड केन्द्रमा नयाँ स्रोत थपिएको छ।'
+          : 'डाउनलोड केन्द्रमा नयाँ स्रोत "$title" थपिएको छ।',
       relatedId: 'download:$itemId',
       destination: destDownloadCenter,
       audience: resolved,
@@ -749,6 +874,8 @@ class NotificationService {
       type: typeWebsiteUpdate,
       title: 'Website Update Available',
       message: 'A new website update is available.',
+      titleNe: 'वेबसाइट अद्यावधिक उपलब्ध छ',
+      messageNe: 'नयाँ वेबसाइट अद्यावधिक उपलब्ध छ।',
       relatedId: 'website_update:$updateId',
       destination: destDashboard,
       audience: audience,
@@ -817,45 +944,50 @@ class NotificationService {
   ];
 
   /// Just now · 5 minutes ago · 3 hours ago · Yesterday · Sept 5.
+  /// Nepali readers get Nepali labels automatically.
   static String timeAgo(DateTime? date) {
     if (date == null) return '';
+    final ne = LanguageService.isNepali;
     final now = DateTime.now();
     final diff = now.difference(date);
-    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inSeconds < 60) return ne ? 'भर्खरै' : 'Just now';
     if (diff.inMinutes < 60) {
       final m = diff.inMinutes;
-      return '$m minute${m == 1 ? '' : 's'} ago';
+      return ne ? '$m मिनेटअघि' : '$m minute${m == 1 ? '' : 's'} ago';
     }
     if (diff.inHours < 24 && now.day == date.day) {
       final h = diff.inHours;
-      return '$h hour${h == 1 ? '' : 's'} ago';
+      return ne ? '$h घण्टाअघि' : '$h hour${h == 1 ? '' : 's'} ago';
     }
     final yesterday = now.subtract(const Duration(days: 1));
     if (date.year == yesterday.year &&
         date.month == yesterday.month &&
         date.day == yesterday.day) {
-      return 'Yesterday';
+      return tr('c_yesterday');
     }
-    final base = '${_shortMonths[date.month - 1]} ${date.day}';
+    final months = ne ? AppStrings.shortMonthsNe : _shortMonths;
+    final base = '${months[date.month - 1]} ${date.day}';
     return date.year == now.year ? base : '$base, ${date.year}';
   }
 
   /// Today · Yesterday · Sept 5 (group headers in the panel).
   static String dayGroup(DateTime? date) {
     if (date == null) return 'Earlier';
+    final ne = LanguageService.isNepali;
     final now = DateTime.now();
     if (date.year == now.year &&
         date.month == now.month &&
         date.day == now.day) {
-      return 'Today';
+      return tr('c_today');
     }
     final yesterday = now.subtract(const Duration(days: 1));
     if (date.year == yesterday.year &&
         date.month == yesterday.month &&
         date.day == yesterday.day) {
-      return 'Yesterday';
+      return tr('c_yesterday');
     }
-    final base = '${_shortMonths[date.month - 1]} ${date.day}';
+    final months = ne ? AppStrings.shortMonthsNe : _shortMonths;
+    final base = '${months[date.month - 1]} ${date.day}';
     return date.year == now.year ? base : '$base, ${date.year}';
   }
 }
@@ -869,6 +1001,8 @@ class AppNotification {
   final String type;
   final String title;
   final String message;
+  final String titleNe;
+  final String messageNe;
   final String? relatedId;
   final String destination;
   final String? audienceType;
@@ -884,6 +1018,8 @@ class AppNotification {
     required this.type,
     required this.title,
     required this.message,
+    this.titleNe = '',
+    this.messageNe = '',
     this.relatedId,
     required this.destination,
     this.audienceType,
@@ -897,6 +1033,22 @@ class AppNotification {
   bool get isExpired {
     if (expiresAt == null) return false;
     return expiresAt!.isBefore(DateTime.now());
+  }
+
+  /// Nepali readers see the Nepali title/message when the event
+  /// carries them; everyone else (and legacy events) see English.
+  String get displayTitle {
+    if (LanguageService.isNepali && titleNe.trim().isNotEmpty) {
+      return titleNe;
+    }
+    return title;
+  }
+
+  String get displayMessage {
+    if (LanguageService.isNepali && messageNe.trim().isNotEmpty) {
+      return messageNe;
+    }
+    return message;
   }
 
   String get timeLabel => NotificationService.timeAgo(createdAt?.toLocal());
@@ -936,6 +1088,8 @@ class AppNotification {
       type: (event['type'] ?? '').toString(),
       title: (event['title'] ?? 'Notification').toString(),
       message: (event['message'] ?? '').toString(),
+      titleNe: (event['title_ne'] ?? '').toString(),
+      messageNe: (event['message_ne'] ?? '').toString(),
       relatedId: event['related_id']?.toString(),
       destination:
           (event['destination'] ?? NotificationService.destDashboard).toString(),

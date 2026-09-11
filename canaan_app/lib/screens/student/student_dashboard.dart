@@ -8,11 +8,15 @@ import '../../widgets/app_sidebar.dart';
 import '../../widgets/dashboard_design.dart';
 import '../../services/auth_service.dart';
 import '../../services/download_center_service.dart';
+import '../../services/language_service.dart';
 import '../../services/notice_service.dart';
 import '../../services/notification_navigation.dart';
+import '../../services/progress_service.dart';
 import '../../services/seen_store.dart';
 import '../../services/session_service.dart';
 import '../../widgets/notification_bell.dart';
+import '../../widgets/star_rating.dart';
+import 'progress_page.dart';
 import '../login_screen.dart';
 import 'download_center.dart';
 import 'leave_application.dart';
@@ -49,6 +53,13 @@ class _StudentDashboardState extends State<StudentDashboard> {
   int _leaveUnread = 0;
   bool _isLoading = true;
   String _notifUserId = '';
+  String _studentId = '';
+  double _attPct = 0;
+  double _memPct = 0;
+  double _partPct = 0;
+  double _discPct = 0;
+  int _stars = 0;
+  bool _hasEvaluation = false;
   final List<StreamSubscription> _realtimeSubs = [];
 
   double get _attendanceRate =>
@@ -66,6 +77,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
     _loadNotifIdentity();
     _loadAll();
+    _loadProgress();
   }
 
   @override
@@ -89,6 +101,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
           role == UserRole.student.name &&
           session.userId.isNotEmpty) {
         setState(() => _notifUserId = session.userId);
+        LanguageService.bind(role: 'student', userId: session.userId);
         return;
       }
     } catch (_) {}
@@ -129,6 +142,89 @@ class _StudentDashboardState extends State<StudentDashboard> {
   }
 
   String _norm(String? v) => (v ?? '').trim().toLowerCase();
+
+  /// Your Progress card data: live attendance + memory percentages and
+  /// the Admin's participation / discipline / star evaluation.
+  Future<void> _loadProgress() async {
+    try {
+      var sid = '';
+      try {
+        final session = await SessionService.getSession();
+        if (session != null && session.role == UserRole.student.name) {
+          sid = session.userId;
+        }
+      } catch (_) {}
+      sid = sid.trim();
+      if (sid.isEmpty && widget.fullName.trim().isNotEmpty) {
+        try {
+          final rows = await _client
+              .from('students')
+              .select('id')
+              .eq('full_name', widget.fullName)
+              .limit(1);
+          final list = List<Map<String, dynamic>>.from(rows);
+          if (list.isNotEmpty) {
+            sid = (list.first['id'] ?? '').toString();
+          }
+        } catch (_) {}
+      }
+      final section =
+          ProgressService.normalizeSection(widget.section ?? '');
+      final results = await Future.wait([
+        ProgressService.attendanceFor(widget.fullName),
+        ProgressService.memoryFor(sid, section),
+        ProgressService.evaluationFor(sid),
+      ]);
+      if (!mounted) return;
+      final att = results[0] as AttendanceSummary;
+      final mem = results[1] as MemorySummary;
+      final eval = results[2] as Map<String, dynamic>?;
+      setState(() {
+        _studentId = sid;
+        _attPct = att.percent;
+        _memPct = mem.percent;
+        _hasEvaluation = eval != null;
+        _partPct =
+            ProgressService.evalInt(eval, 'participation_percentage')
+                .toDouble();
+        _discPct = ProgressService.evalInt(eval, 'discipline_percentage')
+            .toDouble();
+        _stars = ProgressService.evalInt(eval, 'overall_star_rating')
+            .clamp(0, 5);
+      });
+      if (sid.isNotEmpty) {
+        LanguageService.bind(role: 'student', userId: sid);
+      }
+    } catch (_) {}
+  }
+
+  void _openProgress() {
+    if (_studentId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(tr('err_relogin'),
+              style: GoogleFonts.poppins()),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      SlidePageRoute(
+        page: StudentProgressPage(
+          fullName: widget.fullName,
+          studentId: _studentId,
+          section: widget.section,
+        ),
+      ),
+    ).then((_) {
+      if (mounted) _loadProgress();
+    });
+  }
 
   Future<void> _loadAll() async {
     try {
@@ -196,6 +292,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
         });
         _loadNoticeUnread();
         _loadBadges();
+        _loadProgress();
         _watchBadges();
       }
     } catch (_) {
@@ -302,7 +399,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
     }
   }
 
-  /// Live badge refresh for anything new.
+  /// Live badge + progress refresh for anything new.
   void _watchBadges() {
     if (_realtimeSubs.isNotEmpty) return;
     for (final t in [
@@ -310,6 +407,11 @@ class _StudentDashboardState extends State<StudentDashboard> {
       'download_center',
       'student_leave_applications',
       'notices',
+      'attendance_reports',
+      'student_progress_evaluations',
+      'recitation_sub_junior',
+      'recitation_junior',
+      'recitation_senior',
     ]) {
       try {
         _realtimeSubs.add(_client
@@ -318,6 +420,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
             .listen((_) {
               if (mounted) {
                 _loadBadges();
+                _loadProgress();
                 if (t == 'notices') _loadNoticeUnread();
               }
             }));
@@ -360,7 +463,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
     if (section == null || section.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('No section assigned yet', style: GoogleFonts.poppins()),
+          content: Text(tr('err_no_section'),
+              style: GoogleFonts.poppins()),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -387,11 +491,13 @@ class _StudentDashboardState extends State<StudentDashboard> {
       drawer: CanaanSidebar(
         gradient: DashColors.studentGradient,
         fullName: widget.fullName,
-        roleLabel: 'Student',
+        roleLabel: tr('role_student'),
         role: 'student',
         photoUrl: photo,
+        userId: _studentId,
       ),
-      body: RefreshIndicator(
+      body: LangBuilder(
+        builder: (_) => RefreshIndicator(
         onRefresh: _loadAll,
         color: const Color(0xFF0E9F6E),
         child: CustomScrollView(
@@ -415,7 +521,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                   gradient: DashColors.studentGradient,
                   greeting: dashGreeting(),
                   name: widget.fullName,
-                  roleLabel: 'Student',
+                  roleLabel: tr('role_student'),
                   sectionLabel: sectionLabel,
                   photoUrl: photo,
                 ),
@@ -459,7 +565,13 @@ class _StudentDashboardState extends State<StudentDashboard> {
                           const SizedBox(height: 20),
                           FadeInSlide(
                               index: 1,
-                              child: DashSectionHeading('Overview',
+                              child: DashSectionHeading(tr('nav_your_progress'))),
+                          const SizedBox(height: 12),
+                          FadeInSlide(index: 2, child: _progressCard()),
+                          const SizedBox(height: 20),
+                          FadeInSlide(
+                              index: 1,
+                              child: DashSectionHeading(tr('dash_overview'),
                                   trailing: dashTodayLabel())),
                           const SizedBox(height: 12),
                           FadeInSlide(
@@ -473,24 +585,27 @@ class _StudentDashboardState extends State<StudentDashboard> {
                               mainAxisExtent: 158,
                               children: [
                                 DashStat(
-                                  label: 'Attendance Rate',
+                                  label: tr('dash_att_rate'),
                                   value:
                                       '${_attendanceRate.toStringAsFixed(0)}%',
-                                  subtitle: '$_presentCount of $_totalSessions days',
+                                  subtitle: trp('dash_att_sub', {
+                                    'p': '$_presentCount',
+                                    't': '$_totalSessions'
+                                  }),
                                   icon: Icons.check_circle_outline_rounded,
                                   color: const Color(0xFF22C55E),
                                   onTap: _openAttendance,
                                 ),
                                 DashStat(
-                                  label: 'Days Present',
+                                  label: tr('dash_days_present'),
                                   value: '$_presentCount',
-                                  subtitle: 'Keep it up!',
+                                  subtitle: tr('dash_keep_up'),
                                   icon: Icons.calendar_month_rounded,
                                   color: const Color(0xFF1565C0),
                                   onTap: _openAttendance,
                                 ),
                                 DashStat(
-                                  label: 'Memory Verses',
+                                  label: tr('nav_memory_verses'),
                                   value: '$_memoryVerseCount',
                                   subtitle: sectionLabel,
                                   icon: Icons.menu_book_rounded,
@@ -499,9 +614,9 @@ class _StudentDashboardState extends State<StudentDashboard> {
                                   onTap: _openMemoryVerse,
                                 ),
                                 DashStat(
-                                  label: 'Lesson Plans',
+                                  label: tr('nav_lesson_plans'),
                                   value: '$_lessonPlanCount',
-                                  subtitle: 'Published',
+                                  subtitle: tr('dash_published'),
                                   icon: Icons.auto_stories_rounded,
                                   color: const Color(0xFFFF9F0A),
                                 ),
@@ -511,14 +626,15 @@ class _StudentDashboardState extends State<StudentDashboard> {
                           const SizedBox(height: 20),
                           FadeInSlide(
                               index: 3,
-                              child: const DashSectionHeading('Quick Links')),
+                              child: DashSectionHeading(
+                                  tr('dash_quick_links'))),
                           const SizedBox(height: 12),
                           FadeInSlide(
                             index: 4,
                             child: DashQuickLink(
                               icon: Icons.calendar_month_rounded,
-                              title: 'Attendance',
-                              subtitle: 'View your attendance records',
+                              title: tr('nav_attendance'),
+                              subtitle: tr('dash_view_attendance'),
                               color: const Color(0xFF22C55E),
                               colorEnd: const Color(0xFF4ADE80),
                               onTap: _openAttendance,
@@ -529,9 +645,9 @@ class _StudentDashboardState extends State<StudentDashboard> {
                             index: 5,
                             child: DashQuickLink(
                               icon: Icons.menu_book_rounded,
-                              title: 'Memory Verse',
-                              subtitle:
-                                  'View your $sectionLabel memory verses',
+                              title: tr('nav_memory_verse'),
+                              subtitle: trp('dash_view_verses',
+                                  {'s': sectionLabel}),
                               color: const Color(0xFF6366F1),
                               colorEnd: const Color(0xFF8B5CF6),
                               badge: SeenStore.badgeFor(_verseUnread),
@@ -543,8 +659,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
                             index: 6,
                             child: DashQuickLink(
                               icon: Icons.download_rounded,
-                              title: '📥 Download Center',
-                              subtitle: 'Resources shared with you',
+                              title: '📥 ${tr('nav_download')}',
+                              subtitle: tr('dash_view_downloads'),
                               color: const Color(0xFF0E9F6E),
                               colorEnd: const Color(0xFF4ADE80),
                               badge: SeenStore.badgeFor(_dcUnread),
@@ -561,8 +677,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
                             index: 7,
                             child: DashQuickLink(
                               icon: Icons.event_note_rounded,
-                              title: 'Leave Application',
-                              subtitle: 'Explain an absence to the Admin',
+                              title: tr('nav_leave'),
+                              subtitle: tr('dash_leave_sub'),
                               color: const Color(0xFF0E9F6E),
                               colorEnd: const Color(0xFF34D399),
                               badge: SeenStore.badgeFor(_leaveUnread),
@@ -580,8 +696,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
                             index: 8,
                             child: DashQuickLink(
                               icon: Icons.campaign_rounded,
-                              title: '📢 Notice Board',
-                              subtitle: 'Important notices from the Admin',
+                              title: '📢 ${tr('nav_notice_board')}',
+                              subtitle: tr('dash_notice_sub'),
                               color: const Color(0xFFB45309),
                               colorEnd: const Color(0xFFF59E0B),
                               badge: _noticeUnread > 0
@@ -604,6 +720,150 @@ class _StudentDashboardState extends State<StudentDashboard> {
           ],
         ),
       ),
+      ),
+    );
+  }
+
+  Widget _progressCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: DashColors.cardBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: const Icon(Icons.insights_rounded,
+                    color: Color(0xFF6366F1), size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(tr('nav_your_progress'),
+                    style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: DashColors.ink)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _progressRow(tr('pg_attendance'), _attPct,
+              const Color(0xFF22C55E)),
+          const SizedBox(height: 12),
+          _progressRow(
+              tr('pg_memory'), _memPct, const Color(0xFF6366F1)),
+          const SizedBox(height: 12),
+          _progressRow(tr('pg_participation'), _partPct,
+              const Color(0xFFFF9F0A),
+              emptyNote: _hasEvaluation ? null : tr('pg_not_evaluated')),
+          const SizedBox(height: 12),
+          _progressRow(tr('pg_discipline'), _discPct,
+              const Color(0xFF0E9F6E),
+              emptyNote: _hasEvaluation ? null : tr('pg_not_evaluated')),
+          const SizedBox(height: 14),
+          Container(height: 1, color: const Color(0xFFF1F5F9)),
+          const SizedBox(height: 14),
+          Center(
+            child: Text(tr('pg_overall'),
+                style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: DashColors.ink)),
+          ),
+          const SizedBox(height: 8),
+          Center(child: StarRating(stars: _stars, size: 30)),
+          const SizedBox(height: 6),
+          Center(
+            child: Text(ProgressService.overallCardLabel(_stars),
+                style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: DashColors.muted)),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: GestureDetector(
+              onTap: _openProgress,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(tr('c_view_details'),
+                      style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF0E9F6E))),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_forward_rounded,
+                      size: 18, color: Color(0xFF0E9F6E)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _progressRow(String label, double percent, Color color,
+      {String? emptyNote}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(label,
+                  style: GoogleFonts.poppins(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w500,
+                      color: DashColors.ink)),
+            ),
+            Text(
+              emptyNote ?? ProgressService.pctLabel(percent),
+              style: GoogleFonts.poppins(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: emptyNote != null ? DashColors.muted : color),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: SizedBox(
+            height: 9,
+            child: Stack(
+              children: [
+                Container(color: color.withValues(alpha: 0.14)),
+                FractionallySizedBox(
+                  widthFactor:
+                      (percent.clamp(0, 100) / 100).clamp(0.02, 1.0),
+                  child: Container(color: color),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -648,13 +908,13 @@ class _StudentDashboardState extends State<StudentDashboard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Welcome back!',
+                Text(tr('dash_welcome_back'),
                     style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                         color: DashColors.ink)),
                 const SizedBox(height: 2),
-                Text('Ready to learn something new today?',
+                Text(tr('dash_welcome_sub'),
                     style: GoogleFonts.poppins(
                         fontSize: 13, color: DashColors.muted)),
               ],

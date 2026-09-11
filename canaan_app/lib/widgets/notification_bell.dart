@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../screens/notifications_page.dart';
+import '../services/language_service.dart';
 import '../services/notification_service.dart';
 import 'animations.dart';
 
@@ -59,6 +60,7 @@ class _NotificationBellState extends State<NotificationBell> {
   void initState() {
     super.initState();
     _watchingUserId = widget.userId;
+    LanguageService.current.addListener(_onLang);
     if (_watchingUserId.isNotEmpty) {
       _refresh();
       _subscribe();
@@ -82,8 +84,13 @@ class _NotificationBellState extends State<NotificationBell> {
     }
   }
 
+  void _onLang() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    LanguageService.current.removeListener(_onLang);
     _sub?.cancel();
     _debounce?.cancel();
     _glowTimer?.cancel();
@@ -167,7 +174,7 @@ class _NotificationBellState extends State<NotificationBell> {
           IconButton(
             icon: const Icon(Icons.notifications_rounded),
             color: _highlight ? _lavenderDeep : Colors.white,
-            tooltip: 'Notifications',
+            tooltip: tr('nav_notifications'),
             onPressed: _openPage,
           ),
           if (_unread > 0)

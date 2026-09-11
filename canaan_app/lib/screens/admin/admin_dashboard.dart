@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
 import '../../services/credential_service.dart';
+import '../../services/language_service.dart';
 import '../../services/notification_navigation.dart';
 import '../../services/password_reset_service.dart';
 import '../../services/seen_store.dart';
@@ -61,6 +62,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           role == UserRole.admin.name &&
           session.userId.isNotEmpty) {
         setState(() => _notifUserId = session.userId);
+        LanguageService.bind(role: 'admin', userId: session.userId);
         return;
       }
     } catch (_) {}
@@ -189,7 +191,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
     final sub = sections['sub-junior'] ?? 0;
     final jun = sections['junior'] ?? 0;
     final sen = sections['senior'] ?? 0;
-    return '$sub Sub · $jun Jun · $sen Sen';
+    return trp('dash_split',
+        {'a': '$sub', 'b': '$jun', 'c': '$sen'});
   }
 
   @override
@@ -201,10 +204,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
       drawer: CanaanSidebar(
         gradient: DashColors.adminGradient,
         fullName: widget.fullName,
-        roleLabel: 'Canaan Administrator',
+        roleLabel: tr('role_admin'),
         role: 'admin',
+        userId: _notifUserId,
       ),
-      body: RefreshIndicator(
+      body: LangBuilder(
+        builder: (_) => RefreshIndicator(
         onRefresh: _fetchAll,
         color: const Color(0xFF1565C0),
         child: CustomScrollView(
@@ -227,9 +232,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 background: DashboardHero(
                   gradient: DashColors.adminGradient,
                   greeting:
-                      '${dashGreeting()}, Admin',
+                      '${dashGreeting()}, ${tr('role_admin_short')}',
                   name: widget.fullName,
-                  roleLabel: 'Canaan Administrator',
+                  roleLabel: tr('role_admin'),
                 ),
               ),
               actions: [
@@ -269,7 +274,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         children: [
                           FadeInSlide(
                               index: 0,
-                              child: DashSectionHeading('Overview',
+                              child: DashSectionHeading(tr('dash_overview'),
                                   trailing: dashTodayLabel())),
                           const SizedBox(height: 12),
                           FadeInSlide(
@@ -283,15 +288,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               mainAxisExtent: 158,
                               children: [
                                 DashStat(
-                                  label: 'Total Users',
+                                  label: tr('dash_total_users'),
                                   value: '$total',
                                   subtitle:
-                                      '$_adminCount admin · $_teacherCount teachers',
+                                      '$_adminCount ${tr('role_admin_short')} · $_teacherCount ${tr('dash_teachers')}',
                                   icon: Icons.groups_rounded,
                                   color: const Color(0xFF1565C0),
                                 ),
                                 DashStat(
-                                  label: 'Teachers',
+                                  label: tr('dash_teachers'),
                                   value: '$_teacherCount',
                                   subtitle:
                                       _splitSubtitle(_teacherSections),
@@ -303,7 +308,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                           page: const TeacherManagement())),
                                 ),
                                 DashStat(
-                                  label: 'Students',
+                                  label: tr('dash_students'),
                                   value: '$_studentCount',
                                   subtitle:
                                       _splitSubtitle(_studentSections),
@@ -315,9 +320,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                           page: const StudentManagement())),
                                 ),
                                 DashStat(
-                                  label: 'Attendance Reports',
+                                  label: tr('dash_att_reports'),
                                   value: '$_attendanceCount',
-                                  subtitle: 'Submitted by teachers',
+                                  subtitle: tr('dash_submitted_by_teachers'),
                                   icon: Icons.assessment_rounded,
                                   color: const Color(0xFF7B1FA2),
                                 ),
@@ -327,12 +332,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           const SizedBox(height: 20),
                           FadeInSlide(
                               index: 2,
-                              child: const DashSectionHeading('By Section')),
+                              child: DashSectionHeading(
+                                  tr('dash_by_section'))),
                           const SizedBox(height: 12),
                           FadeInSlide(
                             index: 3,
                             child: _SectionBreakdownCard(
-                              title: 'Teachers',
+                              title: tr('dash_teachers'),
                               icon: Icons.co_present_rounded,
                               color: const Color(0xFFF59E0B),
                               sections: _teacherSections,
@@ -342,7 +348,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           FadeInSlide(
                             index: 4,
                             child: _SectionBreakdownCard(
-                              title: 'Students',
+                              title: tr('dash_students'),
                               icon: Icons.school_rounded,
                               color: const Color(0xFF22C55E),
                               sections: _studentSections,
@@ -351,14 +357,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           const SizedBox(height: 20),
                           FadeInSlide(
                               index: 5,
-                              child: const DashSectionHeading('Quick Links')),
+                              child: DashSectionHeading(
+                                  tr('dash_quick_links'))),
                           const SizedBox(height: 12),
                           FadeInSlide(
                             index: 6,
                             child: DashQuickLink(
                               icon: Icons.school_rounded,
-                              title: 'Students',
-                              subtitle: 'Manage students · $_studentCount total',
+                              title: tr('dash_students'),
+                              subtitle: trp('dash_manage_students',
+                                  {'n': '$_studentCount'}),
                               color: const Color(0xFF22C55E),
                               colorEnd: const Color(0xFF4ADE80),
                               badge: SeenStore.badgeFor(_leavePending),
@@ -374,8 +382,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             index: 7,
                             child: DashQuickLink(
                               icon: Icons.co_present_rounded,
-                              title: 'Teachers',
-                              subtitle: 'Manage teachers · $_teacherCount total',
+                              title: tr('dash_teachers'),
+                              subtitle: trp('dash_manage_teachers',
+                                  {'n': '$_teacherCount'}),
                               color: const Color(0xFFF59E0B),
                               colorEnd: const Color(0xFFFFB74D),
                               onTap: () => Navigator.push(
@@ -389,8 +398,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             index: 8,
                             child: DashQuickLink(
                               icon: Icons.settings_rounded,
-                              title: '⚙️ Management',
-                              subtitle: 'Lesson plans & more',
+                              title: '⚙️ ${tr('nav_management')}',
+                              subtitle: tr('dash_manage_sub'),
                               color: const Color(0xFF7B1FA2),
                               colorEnd: const Color(0xFFAB47BC),
                               onTap: () => Navigator.push(
@@ -405,8 +414,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             index: 9,
                             child: DashQuickLink(
                               icon: Icons.lock_person_rounded,
-                              title: '🔐 Authentication',
-                              subtitle: 'Password reset requests',
+                              title: '🔐 ${tr('nav_authentication')}',
+                              subtitle: tr('dash_auth_sub'),
                               color: const Color(0xFF0B2A5B),
                               colorEnd: const Color(0xFF1565C0),
                               badge: SeenStore.badgeFor(_authPending),
@@ -425,6 +434,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -482,7 +492,7 @@ class _SectionBreakdownCard extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text('$title by Section',
+                child: Text('$title ${tr('dash_by_section')}',
                     style: GoogleFonts.poppins(
                         fontSize: 15.5,
                         fontWeight: FontWeight.w700,
@@ -505,13 +515,13 @@ class _SectionBreakdownCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           _SectionBarRow(
-              label: 'Sub Junior', count: sub, max: maxVal, color: color),
+              label: tr('sec_sub'), count: sub, max: maxVal, color: color),
           const SizedBox(height: 10),
           _SectionBarRow(
-              label: 'Junior', count: jun, max: maxVal, color: color),
+              label: tr('sec_jun'), count: jun, max: maxVal, color: color),
           const SizedBox(height: 10),
           _SectionBarRow(
-              label: 'Senior', count: sen, max: maxVal, color: color),
+              label: tr('sec_sen'), count: sen, max: maxVal, color: color),
         ],
       ),
     );
@@ -538,6 +548,8 @@ class _SectionBarRow extends StatelessWidget {
         SizedBox(
           width: 82,
           child: Text(label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: GoogleFonts.poppins(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w500,

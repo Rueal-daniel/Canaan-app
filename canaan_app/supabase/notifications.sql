@@ -85,7 +85,12 @@ BEGIN
       AND column_default IS NULL
       AND column_name NOT IN ('id', 'title', 'message')
   LOOP
-    IF col.data_type IN ('text', 'character varying', 'character') THEN
+    -- Legacy `audience` has a CHECK constraint allowing only a small
+    -- value set: default it to 'all', never to ''.
+    IF col.column_name = 'audience' THEN
+      EXECUTE 'ALTER TABLE public.notifications '
+        || 'ALTER COLUMN audience SET DEFAULT ''all''';
+    ELSIF col.data_type IN ('text', 'character varying', 'character') THEN
       EXECUTE format(
         'ALTER TABLE public.notifications ALTER COLUMN %I SET DEFAULT %L',
         col.column_name, ''
@@ -103,6 +108,10 @@ BEGIN
     END IF;
   END LOOP;
 END $$;
+
+-- Repair any '' audience values left by earlier runs (they violate the
+-- legacy audience CHECK constraint and would break reads/filters).
+UPDATE public.notifications SET audience = 'all' WHERE audience = '';
 
 -- ----------------------------------------------------------------------------
 -- 2. notification_recipients — who receives it + read state

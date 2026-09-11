@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../services/language_service.dart';
 import '../services/notification_service.dart';
 import '../widgets/animations.dart';
 
@@ -57,6 +58,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
   void initState() {
     super.initState();
     _refresh();
+    LanguageService.current.addListener(_onLang);
     try {
       _sub = NotificationService.watchMine(widget.userId).listen(
         (_) {
@@ -69,8 +71,13 @@ class _NotificationsPageState extends State<NotificationsPage> {
     } catch (_) {}
   }
 
+  void _onLang() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    LanguageService.current.removeListener(_onLang);
     _sub?.cancel();
     _debounce?.cancel();
     super.dispose();
@@ -102,6 +109,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
                   type: n.type,
                   title: n.title,
                   message: n.message,
+                  titleNe: n.titleNe,
+                  messageNe: n.messageNe,
                   relatedId: n.relatedId,
                   destination: n.destination,
                   audienceType: n.audienceType,
@@ -152,7 +161,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
           ),
         ),
         title: Text(
-          'Notifications${_unread > 0 ? ' ($_unread)' : ''}',
+          '${tr('nav_notifications')}${_unread > 0 ? ' ($_unread)' : ''}',
           style: GoogleFonts.poppins(
               fontWeight: FontWeight.w600, color: Colors.white),
         ),
@@ -161,7 +170,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
           TextButton(
             onPressed: _unread == 0 ? null : _markAllRead,
             child: Text(
-              'Mark all as read',
+              tr('c_mark_all_read'),
               style: GoogleFonts.poppins(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
@@ -245,7 +254,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
           ),
           const SizedBox(height: 16),
           Text(
-            'No Notifications',
+            tr('c_no_notifications'),
             style: GoogleFonts.poppins(
               fontSize: 18,
               fontWeight: FontWeight.w700,
@@ -254,7 +263,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            "You're all caught up! 🎉",
+            tr('c_caught_up'),
             textAlign: TextAlign.center,
             style: GoogleFonts.poppins(
               fontSize: 14,
@@ -315,7 +324,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                         children: [
                           Expanded(
                             child: Text(
-                              n.title,
+                              n.displayTitle,
                               style: GoogleFonts.poppins(
                                 fontSize: 15,
                                 fontWeight: n.isRead
@@ -335,10 +344,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
                           ),
                         ],
                       ),
-                      if (n.message.isNotEmpty) ...[
+                      if (n.displayMessage.isNotEmpty) ...[
                         const SizedBox(height: 3),
                         Text(
-                          n.message,
+                          n.displayMessage,
                           style: GoogleFonts.poppins(
                             fontSize: 13,
                             height: 1.55,

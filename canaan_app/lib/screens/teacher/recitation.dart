@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/notification_service.dart';
+import '../../services/attendance_report_service.dart';
 import '../../services/recitation_service.dart';
 
 /// Teacher → Student → Memory Verse → Mark Recitation.
@@ -39,6 +40,11 @@ class _MarkRecitationState extends State<MarkRecitation> {
   bool _isSending = false;
   List<Map<String, dynamic>> _students = [];
   Map<String, String> _statuses = {}; // student id -> recited|half_recited|not_recited
+  // Latest attendance session: student id -> present|absent|late.
+  // Absent students get their recitation marking locked.
+  Map<String, String> _attendance = {};
+  String _attendanceDate = '';
+  bool _attendanceLoaded = false;
 
   int? _reportId;
   String _reportStatus = '';
@@ -47,13 +53,30 @@ class _MarkRecitationState extends State<MarkRecitation> {
   final _scrollController = ScrollController();
   final _tableKey = GlobalKey();
 
-  int get _total => _students.length;
-  int get _recited =>
-      _statuses.values.where((s) => s == RecitationService.recited).length;
-  int get _half =>
-      _statuses.values.where((s) => s == RecitationService.halfRecited).length;
-  int get _notRecited =>
-      _statuses.values.where((s) => s == RecitationService.notRecited).length;
+  int get _total => _markable.length;
+  int get _recited => _markable
+      .where((s) =>
+          _statuses[s['id'].toString()] == RecitationService.recited)
+      .length;
+  int get _half => _markable
+      .where((s) =>
+          _statuses[s['id'].toString()] == RecitationService.halfRecited)
+      .length;
+  int get _notRecited => _total - _recited - _half;
+
+  /// Students allowed to be marked (absent students are locked out).
+  List<Map<String, dynamic>> get _markable =>
+      _students.where((s) => !_isAbsentLocked(s['id'].toString())).toList();
+
+  int get _lockedCount => _students.length - _markable.length;
+
+  /// True when the student was absent in the latest attendance session.
+  /// Students with no attendance record stay enabled (attendance for
+  /// them simply hasn't been marked yet).
+  bool _isAbsentLocked(String studentId) {
+    if (!_attendanceLoaded) return false;
+    return (_attendance[studentId] ?? '') == 'absent';
+  }
 
   String get _today => RecitationService.todayStr();
 
@@ -114,6 +137,7 @@ class _MarkRecitationState extends State<MarkRecitation> {
       }
 
       await _loadTodaysReport();
+      await _loadAttendance();
 
       if (mounted) {
         setState(() {
@@ -130,8 +154,43 @@ class _MarkRecitationState extends State<MarkRecitation> {
     }
   }
 
-  Future<void> _loadTodaysReport() async {
+  /// Loads the latest attendance session for this section so students
+  /// marked absent get their recitation marking locked. When no
+  /// attendance exists yet, everyone stays enabled.
+  Future<void> _loadAttendance() async {
+    final table =
+        AttendanceReportService.sectionTable(widget.section);
+    if (table == null) return;
     try {
+      final latest = await _client
+          .from(table)
+          .select('date')
+          .order('date', ascending: false)
+          .limit(1);
+      if ((latest as List).isEmpty) return;
+      final date = ((latest.first as Map)['date'] ?? '').toString();
+      if (date.isEmpty) return;
+      final rows = await _client
+          .from(table)
+          .select('student_id, status')
+          .eq('date', date);
+      final map = <String, String>{};
+      for (final r in (rows as List)) {
+        final m = r as Map;
+        map[m['student_id'].toString()] =
+            RecitationService.norm(m['status']?.toString());
+      }
+      if (mounted) {
+        setState(() {
+          _attendance = map;
+          _attendanceDate = date;
+          _attendanceLoaded = true;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadTodaysReport() async {    try {
       final report = await RecitationService.findTodaysReport(
         _client,
         verseId: widget.verseId,
@@ -185,6 +244,8 @@ class _MarkRecitationState extends State<MarkRecitation> {
 
       for (final s in _students) {
         final sid = s['id'].toString();
+        // Absent students are locked: never touch their rows.
+        if (_isAbsentLocked(sid)) continue;
         final row = <String, dynamic>{
           'student_id': sid,
           'student_name': (s['full_name'] ?? '').toString(),
@@ -206,10 +267,11 @@ class _MarkRecitationState extends State<MarkRecitation> {
         }
       }
 
-      // 🔔 Notify each student of their updated status (fire-and-forget).
+      // 🔔 Notify each marked student (absent students are locked out).
       try {
         for (final s in _students) {
           final sid = s['id'].toString();
+          if (_isAbsentLocked(sid)) continue;
           NotificationService.recitationUpdated(
             studentId: sid,
             verseId: widget.verseId.toString(),
@@ -309,7 +371,8 @@ class _MarkRecitationState extends State<MarkRecitation> {
     }
     setState(() => _isSending = true);
     try {
-      final details = _students
+      // Absent-locked students are excluded from the report entirely.
+      final details = _markable
           .map((s) => {
                 'id': s['id'].toString(),
                 'name': (s['full_name'] ?? '').toString(),
@@ -470,6 +533,10 @@ class _MarkRecitationState extends State<MarkRecitation> {
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                             color: const Color(0xFF111827))),
+                    if (_lockedCount > 0) ...[
+                      const SizedBox(height: 10),
+                      _absentLockBanner(),
+                    ],
                     const SizedBox(height: 12),
                     _studentList(),
                     const SizedBox(height: 20),
@@ -772,6 +839,40 @@ class _MarkRecitationState extends State<MarkRecitation> {
     );
   }
 
+  /// Banner explaining that absent students are locked.
+  Widget _absentLockBanner() {
+    final dateLabel = _attendanceDate.isEmpty
+        ? ''
+        : ' (${RecitationService.prettyDate(_attendanceDate)})';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: const Color(0xFFEF4444).withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_rounded,
+              color: Color(0xFFEF4444), size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '$_lockedCount absent student${_lockedCount == 1 ? '' : 's'} '
+              'locked$dateLabel — marking is disabled for them.',
+              style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF111827)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _studentList() {
     if (_students.isEmpty) {
       return Container(
@@ -802,17 +903,23 @@ class _MarkRecitationState extends State<MarkRecitation> {
         final name = (s['full_name'] ?? '').toString();
         final current =
             _statuses[id] ?? RecitationService.notRecited;
+        final locked = _isAbsentLocked(id);
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: locked ? Colors.grey.shade100 : Colors.white,
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2)),
-            ],
+            border: locked
+                ? Border.all(color: Colors.grey.shade300)
+                : null,
+            boxShadow: locked
+                ? null
+                : [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2)),
+                  ],
           ),
           child: Row(
             children: [
@@ -820,11 +927,16 @@ class _MarkRecitationState extends State<MarkRecitation> {
                 width: 44,
                 height: 44,
                 alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(colors: [
-                    Color(0xFF6366F1),
-                    Color(0xFF8B5CF6)
-                  ]),
+                decoration: BoxDecoration(
+                  gradient: locked
+                      ? LinearGradient(colors: [
+                          Colors.grey.shade400,
+                          Colors.grey.shade300
+                        ])
+                      : const LinearGradient(colors: [
+                          Color(0xFF6366F1),
+                          Color(0xFF8B5CF6)
+                        ]),
                   shape: BoxShape.circle,
                 ),
                 child: Text(_initials(name),
@@ -835,16 +947,38 @@ class _MarkRecitationState extends State<MarkRecitation> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(name,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF111827))),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: locked
+                                ? Colors.grey.shade500
+                                : const Color(0xFF111827))),
+                    if (locked)
+                      Row(
+                        children: [
+                          const Icon(Icons.lock_rounded,
+                              size: 13,
+                              color: Color(0xFFEF4444)),
+                          const SizedBox(width: 4),
+                          Text('Absent — marking locked',
+                              style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color:
+                                      const Color(0xFFEF4444))),
+                        ],
+                      ),
+                  ],
+                ),
               ),
               const SizedBox(width: 8),
               _statusDropdown(id, current,
-                  enabled: RecitationService.markingAllowed),
+                  enabled: RecitationService.markingAllowed && !locked),
             ],
           ),
         );

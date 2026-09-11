@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/credential_service.dart';
+import '../../services/language_service.dart';
 import '../../services/password_reset_service.dart';
 import '../../widgets/animations.dart';
 import 'credential_requests.dart';
@@ -66,7 +67,7 @@ class _AuthenticationPageState extends State<AuthenticationPage> {
           ),
         ),
         title: Text(
-          'Authentication',
+          tr('nav_authentication'),
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.w600,
             color: Colors.white,
@@ -74,7 +75,8 @@ class _AuthenticationPageState extends State<AuthenticationPage> {
         ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: RefreshIndicator(
+      body: LangBuilder(
+        builder: (_) => RefreshIndicator(
         onRefresh: _loadPending,
         color: const Color(0xFF1565C0),
         child: SingleChildScrollView(
@@ -84,7 +86,7 @@ class _AuthenticationPageState extends State<AuthenticationPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Account Security',
+                tr('hub_acct_sec'),
                 style: GoogleFonts.poppins(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -93,7 +95,7 @@ class _AuthenticationPageState extends State<AuthenticationPage> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Review account recovery requests from students and teachers.',
+                tr('hub_acct_sub'),
                 style: GoogleFonts.poppins(
                   fontSize: 13.5,
                   color: Colors.grey.shade600,
@@ -104,10 +106,10 @@ class _AuthenticationPageState extends State<AuthenticationPage> {
                 index: 0,
                 child: _SectionCard(
                   icon: Icons.lock_reset_rounded,
-                  title: 'Password Reset Requests',
+                  title: tr('hub_pw_req'),
                   subtitle: _pendingCount > 0
-                      ? '$_pendingCount waiting for review'
-                      : 'Review username & password recovery',
+                      ? trp('hub_waiting', {'n': '$_pendingCount'})
+                      : tr('hub_review_recovery'),
                   badge: _pendingCount > 0 ? '$_pendingCount' : null,
                   gradient: const LinearGradient(
                     colors: [Color(0xFF0B2A5B), Color(0xFF1565C0)],
@@ -127,10 +129,10 @@ class _AuthenticationPageState extends State<AuthenticationPage> {
                 index: 1,
                 child: _SectionCard(
                   icon: Icons.manage_accounts_rounded,
-                  title: 'Change Credentials Requests',
+                  title: tr('hub_cred_req'),
                   subtitle: _pendingCredCount > 0
-                      ? '$_pendingCredCount waiting for review'
-                      : 'Review username & password changes',
+                      ? trp('hub_waiting', {'n': '$_pendingCredCount'})
+                      : tr('hub_review_changes'),
                   badge:
                       _pendingCredCount > 0 ? '$_pendingCredCount' : null,
                   gradient: const LinearGradient(
@@ -149,6 +151,7 @@ class _AuthenticationPageState extends State<AuthenticationPage> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

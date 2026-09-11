@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/language_service.dart';
 import '../../widgets/animations.dart';
 import 'add_teacher.dart';
 import 'teacher_attendance.dart';
 import 'teacher_details.dart';
 import 'teacher_suspension.dart';
+import 'teacher_tasks.dart';
 
 class TeacherManagement extends StatelessWidget {
   const TeacherManagement({super.key});
@@ -25,19 +27,20 @@ class TeacherManagement extends StatelessWidget {
           ),
         ),
         title: Text(
-          'Teacher Management',
+          tr('hub_teacher_mgmt'),
           style: GoogleFonts.poppins(
               fontWeight: FontWeight.w600, color: Colors.white),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: SingleChildScrollView(
+      body: LangBuilder(
+        builder: (_) => SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Teacher Section',
+              tr('hub_teacher_section'),
               style: GoogleFonts.poppins(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -49,8 +52,8 @@ class TeacherManagement extends StatelessWidget {
               index: 0,
               child: _OptionCard(
                 icon: Icons.person_add_rounded,
-                title: 'Add Teacher',
-                subtitle: 'Add a new teacher to the system',
+                title: tr('opt_add_teacher'),
+                subtitle: tr('opt_add_teacher_sub'),
                 gradient: const LinearGradient(
                     colors: [Color(0xFFFFA000), Color(0xFFFFB74D)]),
                 onTap: () {
@@ -64,8 +67,8 @@ class TeacherManagement extends StatelessWidget {
               index: 1,
               child: _OptionCard(
                 icon: Icons.co_present_rounded,
-                title: 'Teacher Details',
-                subtitle: 'View all teachers by section',
+                title: tr('opt_teacher_details'),
+                subtitle: tr('opt_view_all_teachers'),
                 gradient: const LinearGradient(
                     colors: [Color(0xFF1565C0), Color(0xFF42A5F5)]),
                 onTap: () {
@@ -81,8 +84,8 @@ class TeacherManagement extends StatelessWidget {
               index: 2,
               child: _OptionCard(
                 icon: Icons.fact_check_rounded,
-                title: 'Teacher Attendance',
-                subtitle: 'Mark teacher attendance',
+                title: tr('opt_teacher_att'),
+                subtitle: tr('opt_mark_teacher_att'),
                 gradient: const LinearGradient(
                     colors: [Color(0xFF43A047), Color(0xFF66BB6A)]),
                 onTap: () {
@@ -98,8 +101,8 @@ class TeacherManagement extends StatelessWidget {
               index: 3,
               child: _OptionCard(
                 icon: Icons.no_accounts_rounded,
-                title: 'Teacher Suspension',
-                subtitle: 'Suspend or restore teacher access',
+                title: tr('opt_teacher_susp'),
+                subtitle: tr('opt_susp_teacher_sub'),
                 gradient: const LinearGradient(
                     colors: [Color(0xFFD32F2F), Color(0xFFEF5350)]),
                 onTap: () {
@@ -110,8 +113,26 @@ class TeacherManagement extends StatelessWidget {
                 },
               ),
             ),
+            const SizedBox(height: 12),
+            FadeInSlide(
+              index: 4,
+              child: _OptionCard(
+                icon: Icons.task_rounded,
+                title: tr('nav_teacher_tasks'),
+                subtitle: tr('task_assign_sub'),
+                gradient: const LinearGradient(
+                    colors: [Color(0xFF6D28D9), Color(0xFFA78BFA)]),
+                onTap: () {
+                  Navigator.push(
+                      context,
+                      SlidePageRoute(
+                          page: const AdminTeacherTasksPage()));
+                },
+              ),
+            ),
           ],
         ),
+      ),
       ),
     );
   }

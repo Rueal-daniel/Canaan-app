@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../services/language_service.dart';
 import '../../widgets/animations.dart';
 import 'download_center.dart';
 import 'lesson_plan.dart';
@@ -29,7 +30,7 @@ class ManagementScreen extends StatelessWidget {
           ),
         ),
         title: Text(
-          'Management',
+          tr('nav_management'),
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.w600,
             color: Colors.white,
@@ -37,13 +38,14 @@ class ManagementScreen extends StatelessWidget {
         ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: SingleChildScrollView(
+      body: LangBuilder(
+        builder: (_) => SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Management Options',
+              tr('hub_mgmt_options'),
               style: GoogleFonts.poppins(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -52,7 +54,7 @@ class ManagementScreen extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Create and manage church school materials.',
+              tr('hub_mgmt_sub'),
               style: GoogleFonts.poppins(
                 fontSize: 13.5,
                 color: Colors.grey.shade600,
@@ -63,8 +65,8 @@ class ManagementScreen extends StatelessWidget {
               index: 0,
               child: _OptionCard(
                 icon: Icons.menu_book_rounded,
-                title: 'Lesson Plan',
-                subtitle: 'Create and publish Saturday lesson plans',
+                title: tr('nav_lesson_plan'),
+                subtitle: tr('hub_make_lesson'),
                 gradient: const LinearGradient(
                   colors: [Color(0xFF7B1FA2), Color(0xFFAB47BC)],
                 ),
@@ -82,8 +84,8 @@ class ManagementScreen extends StatelessWidget {
               index: 1,
               child: _OptionCard(
                 icon: Icons.download_rounded,
-                title: 'Download Center',
-                subtitle: 'Share resources, guides and tutorials',
+                title: tr('nav_download'),
+                subtitle: tr('hub_share_dl'),
                 gradient: const LinearGradient(
                   colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
                 ),
@@ -101,8 +103,8 @@ class ManagementScreen extends StatelessWidget {
               index: 2,
               child: _OptionCard(
                 icon: Icons.campaign_rounded,
-                title: 'Notice Board',
-                subtitle: 'Publish notices for teachers & students',
+                title: tr('nav_notice_board'),
+                subtitle: tr('hub_pub_notices'),
                 gradient: const LinearGradient(
                   colors: [Color(0xFFB45309), Color(0xFFF59E0B)],
                 ),
@@ -110,12 +112,13 @@ class ManagementScreen extends StatelessWidget {
                   Navigator.push(
                     context,
                     SlidePageRoute(
-                        page: AdminNoticeBoardPage(adminName: adminName)),
-                  );
-                },
+                          page: AdminNoticeBoardPage(adminName: adminName)),
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -19,6 +19,22 @@ class AttendanceReportService {
   static const approved = 'approved';
   static const rejected = 'rejected';
 
+  /// Per-section table holding one row per student + date
+  /// (`attendance_sub_junior` / `attendance_junior` /
+  /// `attendance_senior`), mirrored from `attendance_reports`.
+  static String? sectionTable(String section) {
+    switch (section) {
+      case 'sub-junior':
+        return 'attendance_sub_junior';
+      case 'junior':
+        return 'attendance_junior';
+      case 'senior':
+        return 'attendance_senior';
+      default:
+        return null;
+    }
+  }
+
   static const _metaKeys = {
     'rejection_reason',
     'reviewed_by_admin_id',

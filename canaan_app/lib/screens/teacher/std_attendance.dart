@@ -34,9 +34,9 @@ class StdAttendance extends StatefulWidget {
 class _StdAttendanceState extends State<StdAttendance> {
   final _client = Supabase.instance.client;
 
-  // TEMP: Saturday-only restriction disabled for testing.
-  // Set back to true to re-enable Saturday-only marking.
-  static const bool _enforceSaturdayOnly = false;
+  // Saturday-only marking: controls + Save are enabled on Saturday;
+  // on other days a notice is shown with previously saved reports.
+  static const bool _enforceSaturdayOnly = true;
 
   bool get _isSaturday =>
       !_enforceSaturdayOnly ||
@@ -69,11 +69,15 @@ class _StdAttendanceState extends State<StdAttendance> {
 
   String get _dateLabel {
     final now = DateTime.now();
+    const weekdays = [
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+      'Sunday'
+    ];
     const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
-    return 'Saturday, ${months[now.month - 1]} ${now.day}, ${now.year}';
+    return '${weekdays[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}, ${now.year}';
   }
 
   String _prettySection(String section) {

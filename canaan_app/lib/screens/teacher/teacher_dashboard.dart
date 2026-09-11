@@ -8,6 +8,7 @@ import '../../widgets/app_sidebar.dart';
 import '../../widgets/dashboard_design.dart';
 import '../../services/auth_service.dart';
 import '../../services/download_center_service.dart';
+import '../../services/language_service.dart';
 import '../../services/notice_service.dart';
 import '../../services/notification_navigation.dart';
 import '../../services/seen_store.dart';
@@ -19,6 +20,7 @@ import 'download_center.dart';
 import 'lesson_plan.dart';
 import 'notice_board.dart';
 import 'student_applications.dart';
+import 'teacher_tasks.dart';
 import 'memory_verse.dart';
 import 'my_attendance.dart';
 
@@ -110,6 +112,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
           role == UserRole.teacher.name &&
           session.userId.isNotEmpty) {
         setState(() => _notifUserId = session.userId);
+        LanguageService.bind(role: 'teacher', userId: session.userId);
       }
     } catch (_) {}
   }
@@ -241,6 +244,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
           // another role's last login on shared devices).
           if (teacherId != null && teacherId.isNotEmpty) {
             _notifUserId = teacherId;
+            LanguageService.bind(role: 'teacher', userId: teacherId);
           }
         });
         _loadNoticeUnread();
@@ -475,10 +479,12 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
       drawer: CanaanSidebar(
         gradient: DashColors.teacherGradient,
         fullName: _teacherName ?? widget.fullName,
-        roleLabel: 'Teacher',
+        roleLabel: tr('role_teacher'),
         role: 'teacher',
+        userId: _teacherId ?? '',
       ),
-      body: RefreshIndicator(
+      body: LangBuilder(
+        builder: (_) => RefreshIndicator(
         onRefresh: _fetchData,
         color: const Color(0xFF7C3AED),
         child: CustomScrollView(
@@ -502,7 +508,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                   gradient: DashColors.teacherGradient,
                   greeting: dashGreeting(),
                   name: _teacherName ?? widget.fullName,
-                  roleLabel: 'Teacher',
+                  roleLabel: tr('role_teacher'),
                   sectionLabel: sectionLabel,
                 ),
               ),
@@ -547,7 +553,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                         children: [
                           FadeInSlide(
                               index: 0,
-                              child: DashSectionHeading('Overview',
+                              child: DashSectionHeading(tr('dash_overview'),
                                   trailing: dashTodayLabel())),
                           const SizedBox(height: 12),
                           FadeInSlide(
@@ -561,7 +567,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                               mainAxisExtent: 158,
                               children: [
                                 DashStat(
-                                  label: 'My Students',
+                                  label: tr('dash_my_students'),
                                   value: '$_myStudentCount',
                                   subtitle: sectionLabel,
                                   icon: Icons.group_outlined,
@@ -569,18 +575,18 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                                   onTap: _openMyStudents,
                                 ),
                                 DashStat(
-                                  label: 'Memory Verses',
+                                  label: tr('nav_memory_verses'),
                                   value: '$_memoryVerseCount',
-                                  subtitle: 'This section',
+                                  subtitle: tr('dash_this_section'),
                                   icon: Icons.menu_book_outlined,
                                   color: const Color(0xFF22C55E),
                                   badge: SeenStore.badgeFor(_verseUnread),
                                   onTap: _openMemoryVerse,
                                 ),
                                 DashStat(
-                                  label: 'Lesson Plans',
+                                  label: tr('nav_lesson_plans'),
                                   value: '$_lessonPlanCount',
-                                  subtitle: 'Published',
+                                  subtitle: tr('dash_published'),
                                   icon: Icons.description_outlined,
                                   color: const Color(0xFFFF9F0A),
                                   badge: SeenStore.badgeFor(_lessonUnread),
@@ -588,9 +594,9 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                                       _loadBadges(_teacherSection)),
                                 ),
                                 DashStat(
-                                  label: 'Notifications',
+                                  label: tr('nav_notifications'),
                                   value: '$_notificationCount',
-                                  subtitle: 'Latest updates',
+                                  subtitle: tr('dash_latest_updates'),
                                   icon: Icons.notifications_outlined,
                                   color: const Color(0xFFA855F7),
                                 ),
@@ -600,15 +606,18 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                           const SizedBox(height: 20),
                           FadeInSlide(
                               index: 2,
-                              child: const DashSectionHeading('Quick Links')),
+                              child: DashSectionHeading(
+                                  tr('dash_quick_links'))),
                           const SizedBox(height: 12),
                           FadeInSlide(
                             index: 3,
                             child: DashQuickLink(
                               icon: Icons.school_rounded,
-                              title: 'Students',
-                              subtitle:
-                                  'View $sectionLabel students ($_myStudentCount)',
+                              title: tr('dash_students'),
+                              subtitle: trp('dash_section_students', {
+                                's': sectionLabel,
+                                'n': '$_myStudentCount'
+                              }),
                               color: const Color(0xFF22C55E),
                               colorEnd: const Color(0xFF4ADE80),
                               onTap: _openMyStudents,
@@ -619,8 +628,8 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                             index: 4,
                             child: DashQuickLink(
                               icon: Icons.person_rounded,
-                              title: 'My Attendance',
-                              subtitle: 'View your attendance history',
+                              title: tr('nav_my_attendance'),
+                              subtitle: tr('dash_my_att_sub'),
                               color: const Color(0xFF1565C0),
                               colorEnd: const Color(0xFF42A5F5),
                               onTap: _openMyAttendance,
@@ -631,8 +640,9 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                             index: 5,
                             child: DashQuickLink(
                               icon: Icons.menu_book_rounded,
-                              title: '📚 Lesson Plan',
-                              subtitle: 'View $sectionLabel lesson plan',
+                              title: '📚 ${tr('nav_lesson_plan')}',
+                              subtitle: trp('dash_lesson_sub',
+                                  {'s': sectionLabel}),
                               color: const Color(0xFFFF9F0A),
                               colorEnd: const Color(0xFFFFB74D),
                               badge: SeenStore.badgeFor(_lessonUnread),
@@ -645,8 +655,8 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                             index: 6,
                             child: DashQuickLink(
                               icon: Icons.download_rounded,
-                              title: '📥 Download Center',
-                              subtitle: 'Resources shared with you',
+                              title: '📥 ${tr('nav_download')}',
+                              subtitle: tr('dash_view_downloads'),
                               color: const Color(0xFF1565C0),
                               colorEnd: const Color(0xFF42A5F5),
                               badge: SeenStore.badgeFor(_dcUnread),
@@ -663,8 +673,8 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                             index: 7,
                             child: DashQuickLink(
                               icon: Icons.campaign_rounded,
-                              title: '📢 Notice Board',
-                              subtitle: 'Important notices from the Admin',
+                              title: '📢 ${tr('nav_notice_board')}',
+                              subtitle: tr('dash_notice_sub'),
                               color: const Color(0xFFB45309),
                               colorEnd: const Color(0xFFF59E0B),
                               badge: _noticeUnread > 0
@@ -686,14 +696,43 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                             index: 8,
                             child: DashQuickLink(
                               icon: Icons.event_note_rounded,
-                              title: 'Student Applications',
-                              subtitle:
-                                  'Leave applications sent for $sectionLabel',
+                              title: tr('nav_student_apps'),
+                              subtitle: trp('dash_sent_for',
+                                  {'s': sectionLabel}),
                               color: const Color(0xFF0E9F6E),
                               colorEnd: const Color(0xFF34D399),
                               badge: SeenStore.badgeFor(_sentAppUnread),
                               onTap: () => _openStudentApplications().then(
                                   (_) => _loadBadges(_teacherSection)),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 9,
+                            child: DashQuickLink(
+                              icon: Icons.task_rounded,
+                              title: '📋 ${tr('nav_teacher_tasks')}',
+                              subtitle: tr('task_my_sub'),
+                              color: const Color(0xFF6D28D9),
+                              colorEnd: const Color(0xFFA78BFA),
+                              onTap: () {
+                                final tid = _teacherId;
+                                if (tid == null || tid.isEmpty) {
+                                  _deny('Could not identify teacher account');
+                                  return;
+                                }
+                                Navigator.push(
+                                  context,
+                                  SlidePageRoute(
+                                    page: TeacherTasksPage(
+                                      teacherId: tid,
+                                      teacherName: _teacherName ??
+                                          widget.fullName,
+                                      section: _teacherSection ?? '',
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -703,6 +742,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
