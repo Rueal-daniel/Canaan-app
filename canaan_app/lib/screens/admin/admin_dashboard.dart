@@ -18,6 +18,7 @@ import 'student_management.dart';
 import 'teacher_management.dart';
 import 'management_screen.dart';
 import 'authentication.dart';
+import 'prayer_requests.dart';
 
 class AdminDashboard extends StatefulWidget {
   final String fullName;
@@ -425,6 +426,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                       page: AuthenticationPage(
                                           adminName: widget.fullName))).then(
                                   (_) => _loadPendingBadges()),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 10,
+                            child: DashQuickLink(
+                              icon: Icons.volunteer_activism_rounded,
+                              title: '🙏 ${tr('nav_prayer_request')}',
+                              subtitle: tr('dash_prayer_sub'),
+                              color: const Color(0xFF7C3AED),
+                              colorEnd: const Color(0xFFA78BFA),
+                              onTap: () => Navigator.push(
+                                  context,
+                                  SlidePageRoute(
+                                      page: AdminPrayerRequestPage(
+                                          adminName: widget.fullName))),
                             ),
                           ),
                           const SizedBox(height: 8),

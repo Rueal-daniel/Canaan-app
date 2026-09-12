@@ -16,8 +16,11 @@ import '../../services/session_service.dart';
 import '../../widgets/notification_bell.dart';
 import '../admin/student_management.dart';
 import '../login_screen.dart';
+import 'canaan_gallery.dart';
 import 'download_center.dart';
+import 'events_calendar.dart';
 import 'lesson_plan.dart';
+import 'prayer_requests.dart';
 import 'notice_board.dart';
 import 'student_applications.dart';
 import 'teacher_tasks.dart';
@@ -81,6 +84,11 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
       'download_center',
       'student_leave_applications',
       'notices',
+      'events',
+      'gallery_posts',
+      'gallery_photos',
+      'prayer_requests',
+      'prayer_request_replies',
     ]) {
       try {
         _realtimeSubs.add(_client
@@ -733,6 +741,74 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                                   ),
                                 );
                               },
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 10,
+                            child: DashQuickLink(
+                              icon: Icons.event_rounded,
+                              title:
+                                  '📅 ${tr('nav_events_calendar')}',
+                              subtitle: tr('dash_events_sub'),
+                              color: const Color(0xFF1E3A8A),
+                              colorEnd: const Color(0xFF3B82F6),
+                              onTap: () => Navigator.push(
+                                context,
+                                SlidePageRoute(
+                                  page: TeacherEventsCalendarPage(
+                                    teacherId: _teacherId ?? '',
+                                    teacherName: _teacherName ??
+                                        widget.fullName,
+                                    section: _teacherSection,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 11,
+                            child: DashQuickLink(
+                              icon: Icons.photo_library_rounded,
+                              title:
+                                  '🖼️ ${tr('nav_canaan_gallery')}',
+                              subtitle: tr('dash_gallery_sub'),
+                              color: const Color(0xFF0F766E),
+                              colorEnd: const Color(0xFF14B8A6),
+                              onTap: () => Navigator.push(
+                                context,
+                                SlidePageRoute(
+                                  page: TeacherCanaanGalleryPage(
+                                    teacherId: _teacherId ?? '',
+                                    teacherName: _teacherName ??
+                                        widget.fullName,
+                                    section: _teacherSection,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 12,
+                            child: DashQuickLink(
+                              icon: Icons.volunteer_activism_rounded,
+                              title:
+                                  '🙏 ${tr('nav_prayer_request')}',
+                              subtitle: tr('dash_prayer_sub'),
+                              color: const Color(0xFF7C3AED),
+                              colorEnd: const Color(0xFFA78BFA),
+                              onTap: () => Navigator.push(
+                                context,
+                                SlidePageRoute(
+                                  page: TeacherPrayerRequestPage(
+                                    teacherId: _teacherId ?? '',
+                                    teacherName: _teacherName ??
+                                        widget.fullName,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 8),

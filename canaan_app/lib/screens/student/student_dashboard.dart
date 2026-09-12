@@ -18,8 +18,11 @@ import '../../widgets/notification_bell.dart';
 import '../../widgets/star_rating.dart';
 import 'progress_page.dart';
 import '../login_screen.dart';
+import 'canaan_gallery.dart';
 import 'download_center.dart';
+import 'events_calendar.dart';
 import 'leave_application.dart';
+import 'prayer_requests.dart';
 import 'memory_verse.dart';
 import 'my_attendance.dart';
 import 'notice_board.dart';
@@ -407,6 +410,12 @@ class _StudentDashboardState extends State<StudentDashboard> {
       'download_center',
       'student_leave_applications',
       'notices',
+      'events',
+      'gallery_posts',
+      'gallery_photos',
+      'prayer_requests',
+      'prayer_request_replies',
+      'student_updates',
       'attendance_reports',
       'student_progress_evaluations',
       'recitation_sub_junior',
@@ -710,6 +719,68 @@ class _StudentDashboardState extends State<StudentDashboard> {
                                           studentName:
                                               widget.fullName))).then(
                                   (_) => _loadNoticeUnread()),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 9,
+                            child: DashQuickLink(
+                              icon: Icons.event_rounded,
+                              title:
+                                  '📅 ${tr('nav_events_calendar')}',
+                              subtitle: tr('dash_events_sub'),
+                              color: const Color(0xFF1E3A8A),
+                              colorEnd: const Color(0xFF3B82F6),
+                              onTap: () => Navigator.push(
+                                context,
+                                SlidePageRoute(
+                                  page: StudentEventsCalendarPage(
+                                    studentName: widget.fullName,
+                                    section: widget.section,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 10,
+                            child: DashQuickLink(
+                              icon: Icons.photo_library_rounded,
+                              title:
+                                  '🖼️ ${tr('nav_canaan_gallery')}',
+                              subtitle: tr('dash_gallery_sub'),
+                              color: const Color(0xFF0F766E),
+                              colorEnd: const Color(0xFF14B8A6),
+                              onTap: () => Navigator.push(
+                                context,
+                                SlidePageRoute(
+                                  page: StudentCanaanGalleryPage(
+                                    studentName: widget.fullName,
+                                    section: widget.section,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 11,
+                            child: DashQuickLink(
+                              icon: Icons.volunteer_activism_rounded,
+                              title:
+                                  '🙏 ${tr('nav_prayer_request')}',
+                              subtitle: tr('dash_prayer_sub'),
+                              color: const Color(0xFF7C3AED),
+                              colorEnd: const Color(0xFFA78BFA),
+                              onTap: () => Navigator.push(
+                                context,
+                                SlidePageRoute(
+                                  page: StudentPrayerRequestPage(
+                                    studentName: widget.fullName,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 8),

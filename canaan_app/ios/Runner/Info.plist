@@ -4,6 +4,10 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Canaan needs access to your photos so you can share event pictures to the School Gallery.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Canaan needs permission to save gallery photos to your Photos.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

@@ -4,8 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../services/language_service.dart';
 import '../../widgets/animations.dart';
 import 'download_center.dart';
+import 'events_calendar.dart';
 import 'lesson_plan.dart';
 import 'notice_board.dart';
+import 'school_gallery.dart';
+import 'student_update.dart';
 
 /// Admin Dashboard → Management.
 ///
@@ -117,6 +120,66 @@ class ManagementScreen extends StatelessWidget {
                   },
                 ),
               ),
+            const SizedBox(height: 12),
+            FadeInSlide(
+              index: 3,
+              child: _OptionCard(
+                icon: Icons.event_rounded,
+                title: tr('nav_events_calendar'),
+                subtitle: tr('hub_events_sub'),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    SlidePageRoute(
+                        page: AdminEventsCalendarPage(
+                            adminName: adminName)),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            FadeInSlide(
+              index: 4,
+              child: _OptionCard(
+                icon: Icons.photo_library_rounded,
+                title: tr('nav_school_gallery'),
+                subtitle: tr('hub_gallery_sub'),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0F766E), Color(0xFF14B8A6)],
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    SlidePageRoute(
+                        page: AdminSchoolGalleryPage(
+                            adminName: adminName)),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            FadeInSlide(
+              index: 5,
+              child: _OptionCard(
+                icon: Icons.assignment_rounded,
+                title: tr('nav_student_update'),
+                subtitle: tr('hub_student_update_sub'),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    SlidePageRoute(
+                        page: AdminStudentUpdatePage(
+                            adminName: adminName)),
+                  );
+                },
+              ),
+            ),
             ],
           ),
         ),

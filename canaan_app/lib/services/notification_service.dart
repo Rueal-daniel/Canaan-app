@@ -41,6 +41,10 @@ class NotificationService {
   static const typeDownload = 'download';
   static const typeWebsiteUpdate = 'website_update';
   static const typeTeacherTask = 'teacher_task';
+  static const typeEvent = 'event';
+  static const typeGallery = 'gallery';
+  static const typePrayerRequest = 'prayer_request';
+  static const typeStudentUpdate = 'student_update';
 
   // -- audiences -------------------------------------------------------------
   static const audienceAll = 'all';
@@ -66,6 +70,10 @@ class NotificationService {
   static const destDownloadCenter = 'download_center';
   static const destTeacherTasks = 'teacher_tasks'; // Teacher → Tasks
   static const destTeacherTasksAdmin = 'teacher_tasks_admin'; // Admin
+  static const destEventsCalendar = 'events_calendar'; // All → Events & Calendar
+  static const destGallery = 'gallery'; // All → Canaan Gallery
+  static const destPrayerRequests = 'prayer_requests'; // All → Prayer Request
+  static const destMyUpdate = 'my_update'; // Student → My Update
 
   static const _archiveLastRunKey = 'canaan_notif_archive_last_run';
   static const _archiveRetentionDays = 90;
@@ -880,6 +888,235 @@ class NotificationService {
       destination: destDashboard,
       audience: audience,
       section: section,
+    );
+  }
+
+  // -- events ------------------------------------------------------------------  /// Admin published a calendar event → the relevant audience/section only.
+  ///
+  /// [audience] is the event audience slug (`everyone`|`students`|`teachers`).
+  /// [sections] are normalized section slugs (`all`|`sub-junior`|`junior`|
+  /// `senior`, possibly several for e.g. Junior + Senior). Only matching
+  /// students/teachers receive the bell notification; tapping it opens
+  /// Events & Calendar (see [destEventsCalendar]).
+  static Future<void> eventPublished({
+    required String eventId,
+    required String title,
+    required String dateLabel,
+    String audience = 'everyone',
+    List<String> sections = const ['all'],
+  }) async {
+    try {
+      final a = audience.trim().toLowerCase();
+      final forTeachers = a == 'teachers' || a == 'teacher';
+      final forStudents = a == 'students' || a == 'student';
+      final cleanSections = sections
+          .map((s) => normalizeSection(s))
+          .where((s) => s.isNotEmpty)
+          .toSet()
+          .toList();
+      final coversAll =
+          cleanSections.isEmpty || cleanSections.contains('all');
+      final sectionLabel = coversAll
+          ? ''
+          : cleanSections
+              .map((s) => s == 'sub-junior'
+                  ? 'Sub Junior'
+                  : s.isEmpty
+                      ? s
+                      : '${s[0].toUpperCase()}${s.substring(1)}')
+              .join(' + ');
+
+      final name = title.trim().isEmpty ? 'A new event' : '“$title”';
+      final when = dateLabel.trim().isEmpty ? '' : ' for $dateLabel';
+      final scope = sectionLabel.isEmpty ? '' : ' ($sectionLabel)';
+      final message = forTeachers
+          ? '$name has been scheduled$when$scope.'
+          : forStudents
+              ? 'A new $title has been scheduled$when$scope.'
+              : '$name has been scheduled$when$scope.';
+
+      final notifAudience = forTeachers
+          ? audienceTeachers
+          : forStudents
+              ? audienceStudents
+              : audienceAll;
+
+      // Single-section (or all) → the standard fan-out path handles it.
+      if (coversAll || cleanSections.length <= 1) {
+        final single =
+            coversAll ? null : normalizeSection(cleanSections.first);
+        await publish(
+          type: typeEvent,
+          title: 'New Event Added',
+          message: message,
+          titleNe: 'नयाँ कार्यक्रम थपियो',
+          messageNe: 'नयाँ कार्यक्रम तालिकामा थपिएको छ।',
+          relatedId: 'event:$eventId',
+          destination: destEventsCalendar,
+          audience: notifAudience,
+          section: single,
+        );
+        return;
+      }
+
+      // Multi-section (e.g. Junior + Senior): create the event once, then
+      // fan out manually across each section (publish() takes one section).
+      final id = await publishEvent(
+        type: typeEvent,
+        title: 'New Event Added',
+        message: message,
+        titleNe: 'नयाँ कार्यक्रम थपियो',
+        messageNe: 'नयाँ कार्यक्रम तालिकामा थपिएको छ।',
+        relatedId: 'event:$eventId',
+        destination: destEventsCalendar,
+        audienceType: notifAudience,
+        section: cleanSections.join(','),
+      );
+      if (id == null || id.isEmpty) return;
+      try {
+        final targets = <String>{};
+        if (forTeachers || (!forTeachers && !forStudents)) {
+          for (final s in cleanSections) {
+            targets.addAll(await _idsOf('teachers', section: s));
+          }
+        }
+        if (forStudents || (!forTeachers && !forStudents)) {
+          for (final s in cleanSections) {
+            targets.addAll(await _idsOf('students', section: s));
+          }
+        }
+        targets.removeWhere((u) => u.isEmpty);
+        if (targets.isEmpty) return;
+        Set<String> already = {};
+        try {
+          final rows = await _client
+              .from(recipientsTable)
+              .select('user_id')
+              .eq('notification_id', id)
+              .inFilter('user_id', targets.toList());
+          already = {
+            for (final r in (rows as List)) (r as Map)['user_id'].toString(),
+          };
+        } catch (_) {}
+        final missing =
+            targets.where((u) => !already.contains(u)).toList();
+        if (missing.isEmpty) return;
+        try {
+          await _client.from(recipientsTable).insert([
+            for (final u in missing)
+              {'notification_id': id, 'user_id': u},
+          ]);
+        } catch (_) {}
+      } catch (_) {}
+    } catch (_) {}
+  }
+
+  // -- gallery -----------------------------------------------------------------
+  //
+  /// Admin published a gallery post → teachers + students of the section.
+  /// [section] is the post's single normalized section slug
+  /// (`all`|`sub-junior`|`junior`|`senior`). Tapping the notification
+  /// opens Canaan Gallery (see [destGallery]).
+  static Future<void> galleryPublished({
+    required String galleryId,
+    required String title,
+    String section = 'all',
+  }) async {
+    try {
+      final sec = normalizeSection(section);
+      final coversAll = sec.isEmpty || sec == 'all';
+      final name = title.trim().isEmpty ? 'A new gallery' : '“$title”';
+      final sectionLabel = coversAll
+          ? ''
+          : sec == 'sub-junior'
+              ? 'Sub Junior'
+              : '${sec[0].toUpperCase()}${sec.substring(1)}';
+      final scope = sectionLabel.isEmpty ? '' : ' ($sectionLabel)';
+      await publish(
+        type: typeGallery,
+        title: 'New Gallery Added',
+        message: '$name photos have been added to Canaan Gallery$scope.',
+        titleNe: 'नयाँ ग्यालेरी थपियो',
+        messageNe: 'कानान ग्यालेरीमा नयाँ तस्बिरहरू थपिएका छन्।',
+        relatedId: 'gallery:$galleryId',
+        destination: destGallery,
+        audience: coversAll ? audienceAll : audienceSection,
+        section: coversAll ? null : sec,
+      );
+    } catch (_) {}
+  }
+
+  // -- prayer requests ---------------------------------------------------------
+  //
+  /// Someone shared a prayer request → Admins + Teachers + Students.
+  /// One event per request (`related_id = prayer:{id}`), so re-sends can
+  /// never duplicate the notification.
+  static Future<void> prayerRequestSubmitted({
+    required String requestId,
+    required String title,
+  }) {
+    final t = title.trim();
+    return publish(
+      type: typePrayerRequest,
+      title: 'New Prayer Request',
+      message: t.isEmpty
+          ? 'A new prayer request has been shared.'
+          : 'A new prayer request "$t" has been shared.',
+      titleNe: 'नयाँ प्रार्थना अनुरोध',
+      messageNe: t.isEmpty
+          ? 'नयाँ प्रार्थना अनुरोध बाँडिएको छ।'
+          : 'नयाँ प्रार्थना अनुरोध "$t" बाँडिएको छ।',
+      relatedId: 'prayer:$requestId',
+      destination: destPrayerRequests,
+      audience: audienceAll,
+    );
+  }
+
+  /// Admin replied → ONLY the original sender (student, teacher or admin).
+  /// `related_id = prayer:{id}:reply` keeps it distinct from the
+  /// submission event, with the same duplicate-prevention guarantee.
+  static Future<void> prayerReplySent({
+    required String requestId,
+    required String senderUserId,
+  }) {
+    if (senderUserId.isEmpty) return Future.value();
+    return publish(
+      type: typePrayerRequest,
+      title: 'Admin Replied to Your Prayer Request',
+      message:
+          'Canaan Administrator has replied to your prayer request.',
+      titleNe: 'तपाईंको प्रार्थना अनुरोधमा जवाफ',
+      messageNe:
+          'कानान प्रशासकले तपाईंको प्रार्थना अनुरोधमा जवाफ दिनुभएको छ।',
+      relatedId: 'prayer:$requestId:reply',
+      destination: destPrayerRequests,
+      audience: audienceIndividual,
+      userId: senderUserId,
+    );
+  }
+
+  // -- student updates -------------------------------------------------------
+  //
+  /// Admin sent a student update → ONLY that one specific student.
+  /// One event per update (`related_id = student_update:{id}`), so
+  /// re-sends can never duplicate the notification or leak it to
+  /// other students.
+  static Future<void> studentUpdateSent({
+    required String updateId,
+    required String studentId,
+  }) {
+    if (studentId.isEmpty) return Future.value();
+    return publish(
+      type: typeStudentUpdate,
+      title: 'New Student Update',
+      message: 'Your new Student Update has been added by Admin.',
+      titleNe: 'नयाँ विद्यार्थी अद्यावधिक',
+      messageNe:
+          'प्रशासकद्वारा तपाईंको नयाँ विद्यार्थी अद्यावधिक थपिएको छ।',
+      relatedId: 'student_update:$updateId',
+      destination: destMyUpdate,
+      audience: audienceIndividual,
+      userId: studentId,
     );
   }
 

@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/notification_service.dart';
+import '../services/prayer_request_service.dart';
 import '../widgets/animations.dart';
 import '../screens/admin/authentication.dart';
 import '../screens/admin/credential_requests.dart';
 import '../screens/admin/download_center.dart';
+import '../screens/admin/events_calendar.dart';
+import '../screens/admin/prayer_requests.dart';
+import '../screens/admin/school_gallery.dart';
+import '../screens/admin/student_update.dart';
 import '../screens/admin/leave_applications.dart';
 import '../screens/admin/lesson_plan.dart';
 import '../screens/admin/notice_board.dart';
@@ -14,11 +19,18 @@ import '../screens/admin/std_report.dart';
 import '../screens/admin/student_applications.dart';
 import '../screens/change_credentials_page.dart';
 import '../screens/student/download_center.dart';
+import '../screens/student/events_calendar.dart';
+import '../screens/student/canaan_gallery.dart';
+import '../screens/student/my_update.dart';
+import '../screens/student/prayer_requests.dart';
 import '../screens/student/leave_application.dart';
 import '../screens/student/memory_verse.dart';
 import '../screens/student/my_attendance.dart';
 import '../screens/student/notice_board.dart';
 import '../screens/teacher/download_center.dart';
+import '../screens/teacher/events_calendar.dart';
+import '../screens/teacher/canaan_gallery.dart';
+import '../screens/teacher/prayer_requests.dart';
 import '../screens/teacher/lesson_plan.dart';
 import '../screens/teacher/memory_verse.dart';
 import '../screens/teacher/my_attendance.dart';
@@ -183,6 +195,70 @@ class NotificationNavigation {
       case NotificationService.destTeacherTasksAdmin:
         if (r == 'admin') {
           page = AdminTeacherTasksPage(adminName: aname);
+        }
+        break;
+      case NotificationService.destEventsCalendar:
+        if (r == 'student') {
+          page = StudentEventsCalendarPage(
+            studentName: name,
+            section: sec,
+          );
+        } else if (r == 'teacher') {
+          page = TeacherEventsCalendarPage(
+            teacherId: tid,
+            teacherName: tname,
+            section: sec,
+          );
+        } else {
+          page = AdminEventsCalendarPage(adminName: aname);
+        }
+        break;
+      case NotificationService.destGallery:
+        if (r == 'student') {
+          page = StudentCanaanGalleryPage(
+            studentName: name,
+            section: sec,
+          );
+        } else if (r == 'teacher') {
+          page = TeacherCanaanGalleryPage(
+            teacherId: tid,
+            teacherName: tname,
+            section: sec,
+          );
+        } else {
+          page = AdminSchoolGalleryPage(adminName: aname);
+        }
+        break;
+      case NotificationService.destPrayerRequests:
+        final focusId =
+            PrayerRequestService.focusIdFromRelatedId(
+                notification.relatedId);
+        if (r == 'student') {
+          page = StudentPrayerRequestPage(
+            studentName: name,
+            focusRequestId: focusId,
+          );
+        } else if (r == 'teacher') {
+          page = TeacherPrayerRequestPage(
+            teacherId: tid,
+            teacherName: tname,
+            focusRequestId: focusId,
+          );
+        } else {
+          page = AdminPrayerRequestPage(
+            adminName: aname,
+            focusRequestId: focusId,
+          );
+        }
+        break;
+      case NotificationService.destMyUpdate:
+        if (r == 'student') {
+          page = StudentMyUpdatePage(
+            fullName: name,
+            section: sec.isEmpty ? null : sec,
+          );
+        } else {
+          page = AdminStudentUpdatePage(adminName: aname);
         }
         break;
       default:

@@ -7,6 +7,7 @@ import '../screens/change_credentials_page.dart';
 import '../screens/profile_page.dart';
 import '../screens/settings_page.dart';
 import '../screens/student/my_student_id.dart';
+import '../screens/student/my_update.dart';
 import '../services/language_service.dart';
 import 'dashboard_design.dart' show dashInitials;
 
@@ -303,7 +304,7 @@ class _CanaanSidebarState extends State<CanaanSidebar> {
               const SizedBox.shrink(),
             // -- Settings (Admin, Teacher & Student) ---------------------------
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
               child: _SidebarButton(
                 icon: Icons.settings_rounded,
                 label: tr('nav_settings'),
@@ -324,6 +325,29 @@ class _CanaanSidebarState extends State<CanaanSidebar> {
                 },
               ),
             ),
+            // -- My Update (students only) -------------------------------------
+            if (_role == 'student')
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+                child: _SidebarButton(
+                  icon: Icons.assignment_rounded,
+                  label: tr('nav_my_update'),
+                  gradient: const [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => StudentMyUpdatePage(
+                          fullName: fullName,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              )
+            else
+              const SizedBox(height: 14),
           ],
         ),
       ),
