@@ -7,15 +7,18 @@ import '../../widgets/animations.dart';
 import '../../widgets/app_sidebar.dart';
 import '../../widgets/dashboard_design.dart';
 import '../../services/auth_service.dart';
+import '../../services/alert_service.dart';
 import '../../services/download_center_service.dart';
 import '../../services/language_service.dart';
 import '../../services/notice_service.dart';
 import '../../services/notification_navigation.dart';
 import '../../services/seen_store.dart';
 import '../../services/session_service.dart';
+import '../../widgets/alert_popup.dart';
 import '../../widgets/notification_bell.dart';
 import '../admin/student_management.dart';
 import '../login_screen.dart';
+import 'alerts.dart';
 import 'canaan_gallery.dart';
 import 'certificates.dart';
 import 'download_center.dart';
@@ -61,7 +64,9 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
   bool _isLoading = true;
   Timer? _suspensionTimer;
   String _notifUserId = '';
+  int _alertUnread = 0;
   final List<StreamSubscription> _realtimeSubs = [];
+  final _alertPopups = AlertPopupWatcher();
 
   @override
   void initState() {
@@ -90,20 +95,36 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
       'gallery_photos',
       'prayer_requests',
       'prayer_request_replies',
+      'alerts',
+      'alert_recipients',
     ]) {
       try {
         _realtimeSubs.add(_client
             .from(t)
             .stream(primaryKey: ['id'])
             .listen((_) {
-              if (mounted) _loadBadges(_teacherSection);
+              if (mounted) {
+                _loadBadges(_teacherSection);
+                _loadAlertBadge();
+              }
             }));
       } catch (_) {}
     }
+    // Realtime alert popups for this teacher.
+    _alertPopups.start(
+      context,
+      role: 'teacher',
+      userId: _teacherId ?? '',
+      inboxPage: () => TeacherAlertsPage(
+        teacherId: _teacherId ?? '',
+        teacherName: _teacherName ?? widget.fullName,
+      ),
+    );
   }
 
   @override
   void dispose() {
+    _alertPopups.dispose();
     _suspensionTimer?.cancel();
     for (final s in _realtimeSubs) {
       s.cancel();
@@ -258,10 +279,36 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
         });
         _loadNoticeUnread();
         _loadBadges(section);
+        _loadAlertBadge();
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Unread alert count for the Alerts quick-link badge (own section,
+  /// non-expired alerts only).
+  Future<void> _loadAlertBadge() async {
+    try {
+      final section = (_teacherSection ?? '').trim();
+      var uid = (_teacherId ?? '').trim();
+      if (uid.isEmpty) {
+        try {
+          final session = await SessionService.getSession();
+          if (session != null &&
+              session.role == UserRole.teacher.name) {
+            uid = session.userId.trim();
+          }
+        } catch (_) {}
+      }
+      if (uid.isEmpty || section.isEmpty || !mounted) return;
+      final count = await AlertService.unreadCount(
+        role: 'teacher',
+        section: section,
+        userId: uid,
+      );
+      if (mounted) setState(() => _alertUnread = count);
+    } catch (_) {}
   }
 
   /// Red number badges: anything new since the teacher last opened it.
@@ -832,6 +879,30 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                                   ),
                                 ),
                               ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 14,
+                            child: DashQuickLink(
+                              icon:
+                                  Icons.notification_important_rounded,
+                              title: '🚨 ${tr('nav_alerts')}',
+                              subtitle:
+                                  'Important updates from the Admin',
+                              color: const Color(0xFFDC2626),
+                              colorEnd: const Color(0xFFF87171),
+                              badge: SeenStore.badgeFor(_alertUnread),
+                              onTap: () => Navigator.push(
+                                context,
+                                SlidePageRoute(
+                                  page: TeacherAlertsPage(
+                                    teacherId: _teacherId ?? '',
+                                    teacherName: _teacherName ??
+                                        widget.fullName,
+                                  ),
+                                ),
+                              ).then((_) => _loadAlertBadge()),
                             ),
                           ),
                           const SizedBox(height: 8),

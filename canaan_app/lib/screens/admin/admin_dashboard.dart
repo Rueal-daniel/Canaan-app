@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
+import '../../services/complaint_service.dart';
 import '../../services/credential_service.dart';
 import '../../services/language_service.dart';
 import '../../services/notification_navigation.dart';
@@ -40,6 +41,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   bool _isLoading = true;
   int _leavePending = 0;
   int _authPending = 0;
+  int _complaintPending = 0;
   String _notifUserId = '';
   final List<StreamSubscription> _realtimeSubs = [];
 
@@ -107,6 +109,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
     watch('student_leave_applications', _loadPendingBadges);
     watch('password_reset_requests', _loadPendingBadges);
     watch('credential_change_requests', _loadPendingBadges);
+    watch('alerts', _loadPendingBadges);
+    watch('complaints', _loadPendingBadges);
   }
 
   /// Red badges for work waiting on the Admin.
@@ -143,11 +147,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
           } catch (_) {}
           return n;
         }(),
+        () async {
+          try {
+            return await ComplaintService.pendingCount();
+          } catch (_) {
+            return 0;
+          }
+        }(),
       ]);
       if (!mounted) return;
       setState(() {
         _leavePending = results[0];
         _authPending = results[1];
+        _complaintPending = results[2];
       });
     } catch (_) {}
   }
@@ -403,6 +415,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               subtitle: tr('dash_manage_sub'),
                               color: const Color(0xFF7B1FA2),
                               colorEnd: const Color(0xFFAB47BC),
+                              badge: SeenStore.badgeFor(
+                                  _complaintPending),
                               onTap: () => Navigator.push(
                                   context,
                                   SlidePageRoute(

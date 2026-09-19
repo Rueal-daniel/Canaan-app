@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/language_service.dart';
 import '../../widgets/animations.dart';
+import 'alerts.dart';
+import 'complaints.dart';
 import 'download_center.dart';
 import 'events_calendar.dart';
 import 'lesson_plan.dart';
@@ -175,6 +177,46 @@ class ManagementScreen extends StatelessWidget {
                     context,
                     SlidePageRoute(
                         page: AdminStudentUpdatePage(
+                            adminName: adminName)),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            FadeInSlide(
+              index: 6,
+              child: _OptionCard(
+                icon: Icons.notification_important_rounded,
+                title: tr('nav_alerts'),
+                subtitle: 'Publish 24-hour alerts for teachers & students',
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF7C2D12), Color(0xFFB45309)],
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    SlidePageRoute(
+                        page: AdminAlertsPage(
+                            adminName: adminName)),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            FadeInSlide(
+              index: 7,
+              child: _OptionCard(
+                icon: Icons.report_problem_rounded,
+                title: tr('nav_complaint'),
+                subtitle: 'Review problem reports from teachers & students',
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFB91C1C), Color(0xFFEF4444)],
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    SlidePageRoute(
+                        page: AdminComplaintsPage(
                             adminName: adminName)),
                   );
                 },

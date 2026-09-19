@@ -5,7 +5,9 @@ import '../services/notification_service.dart';
 import '../services/prayer_request_service.dart';
 import '../widgets/animations.dart';
 import '../screens/admin/authentication.dart';
+import '../screens/admin/alerts.dart';
 import '../screens/admin/certificates.dart';
+import '../screens/admin/complaints.dart';
 import '../screens/admin/credential_requests.dart';
 import '../screens/admin/download_center.dart';
 import '../screens/admin/events_calendar.dart';
@@ -22,6 +24,7 @@ import '../screens/change_credentials_page.dart';
 import '../screens/student/download_center.dart';
 import '../screens/student/events_calendar.dart';
 import '../screens/student/canaan_gallery.dart';
+import '../screens/student/alerts.dart';
 import '../screens/student/certificates.dart';
 import '../screens/student/my_update.dart';
 import '../screens/student/prayer_requests.dart';
@@ -32,6 +35,7 @@ import '../screens/student/notice_board.dart';
 import '../screens/teacher/download_center.dart';
 import '../screens/teacher/events_calendar.dart';
 import '../screens/teacher/canaan_gallery.dart';
+import '../screens/teacher/alerts.dart';
 import '../screens/teacher/certificates.dart';
 import '../screens/teacher/prayer_requests.dart';
 import '../screens/teacher/lesson_plan.dart';
@@ -274,6 +278,26 @@ class NotificationNavigation {
           );
         } else {
           page = const AdminCertificatesPage();
+        }
+        break;
+      case NotificationService.destAlerts:
+        if (r == 'student') {
+          page = StudentAlertsPage(studentName: name);
+        } else if (r == 'teacher') {
+          page = TeacherAlertsPage(
+            teacherId: tid,
+            teacherName: tname,
+          );
+        } else {
+          page = AdminAlertsPage(adminName: aname);
+        }
+        break;
+      case NotificationService.destComplaints:
+        // Only admins ever receive complaint notifications.
+        if (r == 'admin') {
+          page = AdminComplaintsPage(adminName: aname);
+        } else {
+          return;
         }
         break;
       default:

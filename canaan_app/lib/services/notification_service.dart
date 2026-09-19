@@ -46,6 +46,8 @@ class NotificationService {
   static const typePrayerRequest = 'prayer_request';
   static const typeStudentUpdate = 'student_update';
   static const typeCertificate = 'certificate';
+  static const typeAlert = 'alert';
+  static const typeComplaint = 'complaint';
 
   // -- audiences -------------------------------------------------------------
   static const audienceAll = 'all';
@@ -76,6 +78,8 @@ class NotificationService {
   static const destPrayerRequests = 'prayer_requests'; // All → Prayer Request
   static const destMyUpdate = 'my_update'; // Student → My Update
   static const destCertificates = 'certificates'; // → Certificates page
+  static const destAlerts = 'alerts'; // → Alerts inbox
+  static const destComplaints = 'complaints'; // Admin → Complaints
 
   static const _archiveLastRunKey = 'canaan_notif_archive_last_run';
   static const _archiveRetentionDays = 90;
@@ -1181,6 +1185,90 @@ class NotificationService {
         section: sec,
       );
     } catch (_) {}
+  }
+
+  // -- alerts ------------------------------------------------------------------
+  //
+  /// Admin published an alert → its targeted audience (teachers /
+  /// students / both, section-scoped). One event per alert
+  /// (`related_id = alert:{id}`), so re-publishes can never duplicate
+  /// the notification. The bell event EXPIRES with the alert
+  /// (`expires_at`), so expired alerts vanish from the notification
+  /// list too (§40). Tapping opens the Alerts inbox.
+  static Future<void> alertPublished({
+    required String alertId,
+    required String title,
+    required String sendTo,
+    required String section,
+    DateTime? expiresAt,
+  }) async {
+    if (alertId.isEmpty) return;
+    try {
+      final a = sendTo.trim().toLowerCase();
+      final forTeachers = a == 'teachers' || a == 'teacher';
+      final forStudents = a == 'students' || a == 'student';
+      final audience = forTeachers
+          ? audienceTeachers
+          : forStudents
+              ? audienceStudents
+              : audienceAll;
+      final sec = section.trim().toLowerCase();
+      final scopeAll = sec.isEmpty || sec == 'all';
+      final t = title.trim().isEmpty ? 'A new alert' : '“$title”';
+      // NOTE: [publish] fans out per audience AND section
+      // (resolveRecipients scopes 'all' to the given section for
+      // students/teachers), so Teachers / Students / Both are each
+      // covered by this single call — no duplicates possible
+      // (one event per alert id).
+      await publish(
+        type: typeAlert,
+        title: '🚨 New Alert',
+        message: 'Admin has posted a new alert: $t.',
+        titleNe: '🚨 नयाँ अलर्ट',
+        messageNe:
+            'प्रशासकले नयाँ अलर्ट पोस्ट गर्नुभएको छ: $t।',
+        relatedId: 'alert:$alertId',
+        destination: destAlerts,
+        audience: audience,
+        section: scopeAll ? null : sec,
+        expiresAt: expiresAt,
+      );
+    } catch (_) {}
+  }
+
+  // -- complaints ------------------------------------------------------------
+  //
+  /// Someone submitted a problem report (possibly pre-login) → admins.
+  /// One event per complaint (`related_id = complaint:{id}`), so retries
+  /// can never duplicate the notification. No reporter notification is
+  /// ever sent: a pre-login complaint has no secure account association.
+  static Future<void> complaintSubmitted({
+    required String complaintId,
+    required String reporterName,
+    required String role,
+    required String complaintType,
+  }) {
+    if (complaintId.isEmpty) return Future.value();
+    final who = reporterName.trim().isEmpty
+        ? 'Someone'
+        : reporterName.trim();
+    final kind = complaintType.trim().toLowerCase() == 'emergency'
+        ? 'Emergency'
+        : 'Reminder';
+    final roleLabel = role.trim().toLowerCase() == 'teacher'
+        ? 'Teacher'
+        : 'Student';
+    return publish(
+      type: typeComplaint,
+      title: '🚨 New Complaint',
+      message: '$who ($roleLabel) submitted a new $kind complaint.',
+      titleNe: '🚨 नयाँ गुनासो',
+      messageNe:
+          '$who ले नयाँ $kind गुनासो पेश गर्नुभएको छ।',
+      relatedId: 'complaint:$complaintId',
+      destination: destComplaints,
+      audience: audienceAdmins,
+    );
   }
 
   // -- retention ---------------------------------------------------------------

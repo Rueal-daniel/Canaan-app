@@ -7,6 +7,7 @@ import '../../widgets/animations.dart';
 import '../../widgets/app_sidebar.dart';
 import '../../widgets/dashboard_design.dart';
 import '../../services/auth_service.dart';
+import '../../services/alert_service.dart';
 import '../../services/download_center_service.dart';
 import '../../services/language_service.dart';
 import '../../services/linked_student_service.dart';
@@ -15,11 +16,13 @@ import '../../services/notification_navigation.dart';
 import '../../services/progress_service.dart';
 import '../../services/seen_store.dart';
 import '../../services/session_service.dart';
+import '../../widgets/alert_popup.dart';
 import '../../widgets/notification_bell.dart';
 import '../../widgets/star_rating.dart';
 import '../../widgets/switch_student_sheet.dart';
 import 'progress_page.dart';
 import '../login_screen.dart';
+import 'alerts.dart';
 import 'canaan_gallery.dart';
 import 'certificates.dart';
 import 'download_center.dart';
@@ -68,6 +71,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
   int _verseUnread = 0;
   int _dcUnread = 0;
   int _leaveUnread = 0;
+  int _alertUnread = 0;
   bool _isLoading = true;
   String _notifUserId = '';
   String _studentId = '';
@@ -81,6 +85,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
   int _stars = 0;
   bool _hasEvaluation = false;
   final List<StreamSubscription> _realtimeSubs = [];
+  final _alertPopups = AlertPopupWatcher();
 
   double get _attendanceRate =>
       _totalSessions == 0 ? 0 : (_presentCount / _totalSessions) * 100;
@@ -108,10 +113,21 @@ class _StudentDashboardState extends State<StudentDashboard> {
     _loadNotifIdentity();
     _loadAll();
     _loadProgress();
+    // Realtime alert popups for this (active) student.
+    _alertPopups.start(
+      context,
+      role: 'student',
+      userId: _studentId,
+      inboxPage: () => StudentAlertsPage(
+        studentName: widget.fullName,
+        studentId: _activeIdOrNull,
+      ),
+    );
   }
 
   @override
   void dispose() {
+    _alertPopups.dispose();
     _suspensionTimer?.cancel();
     for (final s in _realtimeSubs) {
       s.cancel();
@@ -438,6 +454,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
         });
         _loadNoticeUnread();
         _loadBadges();
+        _loadAlertBadge();
         _loadProgress();
         _watchBadges();
       }
@@ -561,6 +578,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
       'student_updates',
       'attendance_reports',
       'student_progress_evaluations',
+      'alerts',
+      'alert_recipients',
       'recitation_sub_junior',
       'recitation_junior',
       'recitation_senior',
@@ -573,11 +592,32 @@ class _StudentDashboardState extends State<StudentDashboard> {
               if (mounted) {
                 _loadBadges();
                 _loadProgress();
+                _loadAlertBadge();
                 if (t == 'notices') _loadNoticeUnread();
               }
             }));
       } catch (_) {}
     }
+  }
+
+  /// Unread alert count for the Alerts quick-link badge (active
+  /// student, non-expired alerts only).
+  Future<void> _loadAlertBadge() async {
+    try {
+      var uid = _studentId.trim();
+      if (uid.isEmpty) {
+        uid = await LinkedStudentService.effectiveStudentId(
+            loginStudentId: _loginStudentId);
+      }
+      final section = (widget.section ?? '').trim();
+      if (uid.isEmpty || section.isEmpty || !mounted) return;
+      final count = await AlertService.unreadCount(
+        role: 'student',
+        section: section,
+        userId: uid,
+      );
+      if (mounted) setState(() => _alertUnread = count);
+    } catch (_) {}
   }
 
   /// Unread notice count for the Notice Board quick-link badge.
@@ -981,6 +1021,28 @@ class _StudentDashboardState extends State<StudentDashboard> {
                                   ),
                                 ),
                               ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 13,
+                            child: DashQuickLink(
+                              icon: Icons.notification_important_rounded,
+                              title: '🚨 ${tr('nav_alerts')}',
+                              subtitle:
+                                  'Important updates from the Admin',
+                              color: const Color(0xFFDC2626),
+                              colorEnd: const Color(0xFFF87171),
+                              badge: SeenStore.badgeFor(_alertUnread),
+                              onTap: () => Navigator.push(
+                                context,
+                                SlidePageRoute(
+                                  page: StudentAlertsPage(
+                                    studentName: widget.fullName,
+                                    studentId: _activeIdOrNull,
+                                  ),
+                                ),
+                              ).then((_) => _loadAlertBadge()),
                             ),
                           ),
                           const SizedBox(height: 8),
