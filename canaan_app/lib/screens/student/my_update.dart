@@ -4,8 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../services/session_service.dart';
-import '../../services/auth_service.dart';
+import '../../services/linked_student_service.dart';
 import '../../services/student_update_service.dart';
 import '../../widgets/animations.dart';
 import '../../widgets/student_update_detail.dart';
@@ -19,10 +18,14 @@ import '../../widgets/student_update_detail.dart';
 class StudentMyUpdatePage extends StatefulWidget {
   final String fullName;
   final String? section;
+
+  /// Active (viewed) student id — updates load for this student only.
+  final String? studentId;
   const StudentMyUpdatePage({
     super.key,
     required this.fullName,
     this.section,
+    this.studentId,
   });
 
   @override
@@ -56,15 +59,15 @@ class _StudentMyUpdatePageState extends State<StudentMyUpdatePage> {
     super.dispose();
   }
 
-  /// The student's own row id — the ONLY key this page ever queries by.
+  /// The ACTIVE student's own row id — the ONLY key this page ever
+  /// queries by (verified linked selection, never another student).
   Future<void> _resolveStudentId() async {
-    var sid = '';
-    try {
-      final session = await SessionService.getSession();
-      if (session != null && session.role == UserRole.student.name) {
-        sid = session.userId.trim();
-      }
-    } catch (_) {}
+    var sid = (widget.studentId ?? '').trim();
+    if (sid.isEmpty) {
+      try {
+        sid = await LinkedStudentService.effectiveStudentId();
+      } catch (_) {}
+    }
     if (sid.isEmpty && widget.fullName.trim().isNotEmpty) {
       try {
         final row = await _client

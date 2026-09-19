@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/notification_service.dart';
 import '../services/prayer_request_service.dart';
+import '../services/linked_student_service.dart';
 import '../services/session_service.dart';
 import 'animations.dart';
 
@@ -117,10 +118,19 @@ class _PrayerRequestBoardState extends State<PrayerRequestBoard>
   }
 
   /// Identity comes from the logged-in account — name/role/user-id are
-  /// never typed into the form.
+  /// never typed into the form. For students the VERIFIED active (linked)
+  /// student is used so posts and reply notifications belong to the
+  /// dashboard being viewed.
   Future<void> _resolveIdentity() async {
     var uid = widget.hintUserId;
     var name = widget.hintFullName;
+    final isStudent =
+        PrayerRequestService.normalizeRole(widget.role) == 'student';
+    if (isStudent && uid.trim().isEmpty) {
+      try {
+        uid = await LinkedStudentService.effectiveStudentId();
+      } catch (_) {}
+    }
     try {
       final session = await SessionService.getSession();
       if (session != null &&

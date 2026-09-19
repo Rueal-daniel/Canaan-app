@@ -17,6 +17,7 @@ import '../../widgets/notification_bell.dart';
 import '../admin/student_management.dart';
 import '../login_screen.dart';
 import 'canaan_gallery.dart';
+import 'certificates.dart';
 import 'download_center.dart';
 import 'events_calendar.dart';
 import 'lesson_plan.dart';
@@ -803,6 +804,28 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                                 context,
                                 SlidePageRoute(
                                   page: TeacherPrayerRequestPage(
+                                    teacherId: _teacherId ?? '',
+                                    teacherName: _teacherName ??
+                                        widget.fullName,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 13,
+                            child: DashQuickLink(
+                              icon: Icons.workspace_premium_rounded,
+                              title: '🏆 Certificates',
+                              subtitle:
+                                  'Published certificates · $sectionLabel',
+                              color: const Color(0xFFB45309),
+                              colorEnd: const Color(0xFFF59E0B),
+                              onTap: () => Navigator.push(
+                                context,
+                                SlidePageRoute(
+                                  page: TeacherCertificatesPage(
                                     teacherId: _teacherId ?? '',
                                     teacherName: _teacherName ??
                                         widget.fullName,

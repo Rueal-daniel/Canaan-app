@@ -16,11 +16,16 @@ class ProfilePage extends StatefulWidget {
   final String role;
   final String fallbackName;
   final String? photoUrl;
+
+  /// Explicit row id to load (the sidebar passes the ACTIVE student id so
+  /// the profile follows the viewed linked dashboard).
+  final String? userId;
   const ProfilePage({
     super.key,
     required this.role,
     this.fallbackName = '',
     this.photoUrl,
+    this.userId,
   });
 
   @override
@@ -120,13 +125,22 @@ class _ProfilePageState extends State<ProfilePage> {
     }
     try {
       Map<String, dynamic>? row;
-      try {
-        final session = await SessionService.getSession();
-        if (session != null && session.role == widget.role) {
+      final explicitId = (widget.userId ?? '').trim();
+      if (explicitId.isNotEmpty) {
+        try {
           row = await AuthService()
-              .getUserById(userId: session.userId, role: _userRole!);
-        }
-      } catch (_) {}
+              .getUserById(userId: explicitId, role: _userRole!);
+        } catch (_) {}
+      }
+      if (row == null) {
+        try {
+          final session = await SessionService.getSession();
+          if (session != null && session.role == widget.role) {
+            row = await AuthService()
+                .getUserById(userId: session.userId, role: _userRole!);
+          }
+        } catch (_) {}
+      }
       // Fallback: match by full name.
       if (row == null && widget.fallbackName.isNotEmpty) {
         try {

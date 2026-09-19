@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'about_canaan.dart';
 import '../screens/change_credentials_page.dart';
+import '../screens/leaderboard_page.dart';
 import '../screens/profile_page.dart';
 import '../screens/settings_page.dart';
 import '../screens/student/my_student_id.dart';
@@ -111,8 +112,11 @@ class _CanaanSidebarState extends State<CanaanSidebar> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            MyStudentIdPage(fullName: widget.fullName),
+        builder: (_) => MyStudentIdPage(
+          fullName: widget.fullName,
+          studentId:
+              widget.userId.trim().isEmpty ? null : widget.userId.trim(),
+        ),
       ),
     );
   }
@@ -272,6 +276,9 @@ class _CanaanSidebarState extends State<CanaanSidebar> {
                         role: role,
                         fallbackName: fullName,
                         photoUrl: photoUrl,
+                        userId: widget.userId.trim().isEmpty
+                            ? null
+                            : widget.userId.trim(),
                       ),
                     ),
                   );
@@ -328,7 +335,7 @@ class _CanaanSidebarState extends State<CanaanSidebar> {
             // -- My Update (students only) -------------------------------------
             if (_role == 'student')
               Padding(
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
                 child: _SidebarButton(
                   icon: Icons.assignment_rounded,
                   label: tr('nav_my_update'),
@@ -340,13 +347,41 @@ class _CanaanSidebarState extends State<CanaanSidebar> {
                       MaterialPageRoute(
                         builder: (_) => StudentMyUpdatePage(
                           fullName: fullName,
+                          studentId: widget.userId.trim().isEmpty
+                              ? null
+                              : widget.userId.trim(),
                         ),
                       ),
                     );
                   },
                 ),
-              )
-            else
+              ),
+            // -- Leaderboard (Admin, Teacher & Student) ------------------------
+            // Appended last: existing sidebar items above are untouched.
+            // Scope is resolved server-side inside the page from userId,
+            // so teachers/students can only ever see their own section.
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                  14, 10, 14, _role == 'student' ? 14 : 0),
+              child: _SidebarButton(
+                icon: Icons.leaderboard_rounded,
+                label: 'Leaderboard',
+                gradient: const [Color(0xFFB45309), Color(0xFFF59E0B)],
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => LeaderboardPage(
+                        role: _role,
+                        userId: widget.userId,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            if (_role != 'student')
               const SizedBox(height: 14),
           ],
         ),

@@ -45,6 +45,7 @@ class NotificationService {
   static const typeGallery = 'gallery';
   static const typePrayerRequest = 'prayer_request';
   static const typeStudentUpdate = 'student_update';
+  static const typeCertificate = 'certificate';
 
   // -- audiences -------------------------------------------------------------
   static const audienceAll = 'all';
@@ -74,6 +75,7 @@ class NotificationService {
   static const destGallery = 'gallery'; // All → Canaan Gallery
   static const destPrayerRequests = 'prayer_requests'; // All → Prayer Request
   static const destMyUpdate = 'my_update'; // Student → My Update
+  static const destCertificates = 'certificates'; // → Certificates page
 
   static const _archiveLastRunKey = 'canaan_notif_archive_last_run';
   static const _archiveRetentionDays = 90;
@@ -1118,6 +1120,67 @@ class NotificationService {
       audience: audienceIndividual,
       userId: studentId,
     );
+  }
+
+  // -- certificates ----------------------------------------------------------
+  //
+  /// Admin published an achievement certificate → the student (opens
+  /// Student → Certificates) + teachers of the student's section
+  /// (read-only view). One event per certificate
+  /// (`related_id = certificate:{id}`), so re-publishes can never
+  /// duplicate it. Drafts never notify.
+  static Future<void> certificatePublished({
+    required String certificateId,
+    required String studentId,
+    required String studentName,
+    required String section,
+    required String category,
+    required int position,
+  }) async {
+    if (certificateId.isEmpty || studentId.isEmpty) return;
+    final pos = position == 1
+        ? '1st Position'
+        : position == 2
+            ? '2nd Position'
+            : position == 3
+                ? '3rd Position'
+                : 'Position $position';
+    final cat = category.trim().toLowerCase() == 'memory_verse'
+        ? 'Memory Verse Recitation'
+        : 'Attendance';
+    final who = studentName.trim().isEmpty ? 'A student' : studentName.trim();
+    try {
+      await publish(
+        type: typeCertificate,
+        title: 'New Certificate Available',
+        message:
+            'You have received an achievement certificate ($pos in $cat). Tap to view it.',
+        titleNe: 'नयाँ प्रमाणपत्र उपलब्ध छ',
+        messageNe:
+            'तपाईंले उपलब्धि प्रमाणपत्र प्राप्त गर्नुभएको छ ($cat मा $pos)। हेर्न ट्याप गर्नुहोस्।',
+        relatedId: 'certificate:$certificateId',
+        destination: destCertificates,
+        audience: audienceIndividual,
+        userId: studentId,
+      );
+    } catch (_) {}
+    final sec = normalizeSection(section);
+    if (sec.isEmpty) return;
+    try {
+      await publish(
+        type: typeCertificate,
+        title: 'New Student Certificate',
+        message:
+            '$who has received an achievement certificate ($pos in $cat).',
+        titleNe: 'नयाँ विद्यार्थी प्रमाणपत्र',
+        messageNe:
+            '$who ले उपलब्धि प्रमाणपत्र प्राप्त गर्नुभएको छ ($cat मा $pos)।',
+        relatedId: 'certificate:$certificateId:teachers',
+        destination: destCertificates,
+        audience: audienceTeachers,
+        section: sec,
+      );
+    } catch (_) {}
   }
 
   // -- retention ---------------------------------------------------------------

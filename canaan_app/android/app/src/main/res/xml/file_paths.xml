@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider paths for the self-update system.
+     Downloaded APKs live in app-private external storage:
+     Android/data/<package>/files/updates/ (no storage permission needed). -->
+<paths>
+    <external-files-path name="updates" path="updates/" />
+    <cache-path name="updates_cache" path="updates/" />
+</paths>

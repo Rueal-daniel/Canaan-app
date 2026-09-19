@@ -18,7 +18,11 @@ class _AttendanceEntry {
 /// stored names contain trailing spaces.
 class MyAttendance extends StatefulWidget {
   final String fullName;
-  const MyAttendance({super.key, required this.fullName});
+
+  /// Active (viewed) student id. Attendance rows are name-matched, so this
+  /// is kept for API uniformity and future id-based matching.
+  final String? studentId;
+  const MyAttendance({super.key, required this.fullName, this.studentId});
 
   @override
   State<MyAttendance> createState() => _MyAttendanceState();

@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../services/linked_student_service.dart';
 import '../../services/notice_service.dart';
-import '../../services/session_service.dart';
 import '../../widgets/animations.dart';
 import '../../widgets/notice_rich_text.dart';
 
@@ -16,9 +16,14 @@ import '../../widgets/notice_rich_text.dart';
 /// NEW indicators cleared via the server-side `read_by` array.
 class StudentNoticeBoardPage extends StatefulWidget {
   final String studentName;
+
+  /// Active (viewed) student id — read-state key follows the viewed
+  /// dashboard so each linked student keeps their own NEW badges.
+  final String? studentId;
   const StudentNoticeBoardPage({
     super.key,
     this.studentName = '',
+    this.studentId,
   });
 
   @override
@@ -45,8 +50,11 @@ class _StudentNoticeBoardPageState extends State<StudentNoticeBoardPage> {
 
   Future<void> _init() async {
     try {
-      final session = await SessionService.getSession();
-      _readKey = session?.userId ?? '';
+      var id = (widget.studentId ?? '').trim();
+      id = id.isEmpty
+          ? await LinkedStudentService.effectiveStudentId()
+          : id;
+      _readKey = id;
     } catch (_) {}
     _readKey = _readKey.isEmpty
         ? 'name:${widget.studentName}'

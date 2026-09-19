@@ -4,8 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../services/auth_service.dart';
-import '../../services/session_service.dart';
+import '../../services/linked_student_service.dart';
 import '../../services/student_id_service.dart';
 import '../../widgets/animations.dart';
 import '../../widgets/student_id_card.dart';
@@ -18,7 +17,10 @@ import '../id_card_print_preview.dart';
 /// can change the ID, name, section or photo.
 class MyStudentIdPage extends StatefulWidget {
   final String fullName;
-  const MyStudentIdPage({super.key, this.fullName = ''});
+
+  /// Active (viewed) student id — the card shown belongs to this student.
+  final String? studentId;
+  const MyStudentIdPage({super.key, this.fullName = '', this.studentId});
 
   @override
   State<MyStudentIdPage> createState() => _MyStudentIdPageState();
@@ -51,14 +53,14 @@ class _MyStudentIdPageState extends State<MyStudentIdPage> {
     super.dispose();
   }
 
+  /// The ACTIVE student's id (verified linked selection) — the ONLY
+  /// card this page can ever show.
   Future<String> _ownId() async {
     try {
-      final session = await SessionService.getSession();
-      if (session != null &&
-          session.role == UserRole.student.name &&
-          session.userId.isNotEmpty) {
-        return session.userId;
-      }
+      final sid = (widget.studentId ?? '').trim();
+      if (sid.isNotEmpty) return sid;
+      final effective = await LinkedStudentService.effectiveStudentId();
+      if (effective.trim().isNotEmpty) return effective.trim();
     } catch (_) {}
     if (widget.fullName.trim().isNotEmpty) {
       try {

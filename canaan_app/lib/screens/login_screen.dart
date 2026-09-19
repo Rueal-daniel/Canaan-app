@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
+import '../services/linked_student_service.dart';
 import '../services/session_service.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/animations.dart';
@@ -158,6 +159,14 @@ class _LoginScreenState extends State<LoginScreen> {
             userId: userId,
             role: _selectedRole!.name,
           );
+          // Fresh login: the viewed student starts as the login student.
+          // (Linked switching only changes the ACTIVE student afterwards
+          // and never touches this login session.)
+          if (_selectedRole == UserRole.student) {
+            await LinkedStudentService.setActiveStudentId(userId);
+          } else {
+            await LinkedStudentService.clearActiveStudent();
+          }
         }
         Widget dashboard;
         switch (_selectedRole!) {
@@ -178,6 +187,8 @@ class _LoginScreenState extends State<LoginScreen> {
               fullName: user['full_name'] ?? user['username'],
               photoUrl: user['photo_url'],
               section: user['section'],
+              studentId: userId,
+              loginStudentId: userId,
             );
             break;
         }

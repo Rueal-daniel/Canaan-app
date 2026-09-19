@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/auth_service.dart';
+import '../services/linked_student_service.dart';
 import '../widgets/animations.dart';
 import 'admin/admin_dashboard.dart';
 import 'login_screen.dart';
@@ -58,10 +59,29 @@ class _AuthGateState extends State<AuthGate> {
           );
           break;
       case UserRole.student:
+        // Restore the ACTIVE linked student when one was selected before
+        // the app closed — only if that linked access is still valid
+        // (same family group, account still exists, not suspended).
+        // The LOGIN session itself is never replaced.
+        final loginId = (user['id'] ?? '').toString();
+        var active = user;
+        var activeId = loginId;
+        try {
+          final resolved = await LinkedStudentService.resolveRestoredActive(
+            loginStudentId: loginId,
+          );
+          if (resolved != null) {
+            active = resolved;
+            activeId = (resolved['id'] ?? loginId).toString();
+          }
+        } catch (_) {}
         dashboard = StudentDashboard(
-          fullName: user['full_name'] ?? user['username'] ?? 'Student',
-          photoUrl: user['photo_url'],
-          section: user['section'],
+          fullName:
+              active['full_name'] ?? active['username'] ?? 'Student',
+          photoUrl: active['photo_url'],
+          section: active['section'],
+          studentId: activeId,
+          loginStudentId: loginId,
         );
         break;
       }

@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'session_service.dart';
@@ -224,6 +225,11 @@ class AuthService {
   /// Fully signs out: clears Supabase Auth state (revokes the persisted
   /// Supabase token) and wipes the local profile session so the next
   /// app start correctly lands on the Login page.
+  ///
+  /// The linked-student ACTIVE selection is cleared here too (same
+  /// SharedPreferences key as LinkedStudentService — inlined to avoid a
+  /// service import cycle), so a later login on a shared device can
+  /// never inherit another family's viewed dashboard.
   Future<void> logout() async {
     try {
       await _client.auth.signOut();
@@ -231,5 +237,9 @@ class AuthService {
       // No active Supabase Auth session — still clear local state below.
     }
     await SessionService.clearSession();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('canaan_active_student_id');
+    } catch (_) {}
   }
 }

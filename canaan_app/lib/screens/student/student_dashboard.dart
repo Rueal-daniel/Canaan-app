@@ -9,6 +9,7 @@ import '../../widgets/dashboard_design.dart';
 import '../../services/auth_service.dart';
 import '../../services/download_center_service.dart';
 import '../../services/language_service.dart';
+import '../../services/linked_student_service.dart';
 import '../../services/notice_service.dart';
 import '../../services/notification_navigation.dart';
 import '../../services/progress_service.dart';
@@ -16,9 +17,11 @@ import '../../services/seen_store.dart';
 import '../../services/session_service.dart';
 import '../../widgets/notification_bell.dart';
 import '../../widgets/star_rating.dart';
+import '../../widgets/switch_student_sheet.dart';
 import 'progress_page.dart';
 import '../login_screen.dart';
 import 'canaan_gallery.dart';
+import 'certificates.dart';
 import 'download_center.dart';
 import 'events_calendar.dart';
 import 'leave_application.dart';
@@ -31,11 +34,22 @@ class StudentDashboard extends StatefulWidget {
   final String fullName;
   final String? photoUrl;
   final String? section;
+
+  /// Active (viewed) student id — the verified linked selection whose data
+  /// this dashboard shows. Falls back to the login session when empty.
+  final String? studentId;
+
+  /// Secure login (authenticated) student id. NEVER changed by switching;
+  /// used for server-side link verification.
+  final String? loginStudentId;
+
   const StudentDashboard({
     super.key,
     required this.fullName,
     this.photoUrl,
     this.section,
+    this.studentId,
+    this.loginStudentId,
   });
 
   @override
@@ -57,6 +71,9 @@ class _StudentDashboardState extends State<StudentDashboard> {
   bool _isLoading = true;
   String _notifUserId = '';
   String _studentId = '';
+  String _loginStudentId = '';
+  bool _hasLinked = false;
+  bool _isViewingLinked = false;
   double _attPct = 0;
   double _memPct = 0;
   double _partPct = 0;
@@ -71,9 +88,19 @@ class _StudentDashboardState extends State<StudentDashboard> {
   @override
   void initState() {
     super.initState();
+    // Active student starts as the constructor's verified selection.
+    if ((widget.studentId ?? '').trim().isNotEmpty) {
+      _studentId = widget.studentId!.trim();
+    }
+    if ((widget.loginStudentId ?? '').trim().isNotEmpty) {
+      _loginStudentId = widget.loginStudentId!.trim();
+    }
     // Block access if this account has been suspended — including
     // suspension that happened while already logged in.
-    _guardSuspension();
+    _resolveIdentity().then((_) {
+      _guardSuspension();
+      _loadLinkedState();
+    });
     _suspensionTimer = Timer.periodic(
       const Duration(seconds: 60),
       (_) => _guardSuspension(),
@@ -92,19 +119,120 @@ class _StudentDashboardState extends State<StudentDashboard> {
     super.dispose();
   }
 
-  /// Resolves the logged-in student's row id for the notification bell.
+  /// Resolves login vs active student ids.
+  ///
+  /// The LOGIN id is the secure authenticated identity (never changed by
+  /// switching). The ACTIVE id is the verified linked selection whose
+  /// dashboard is being viewed. All data queries use the active id.
+  Future<void> _resolveIdentity() async {
+    try {
+      var loginId = _loginStudentId.trim();
+      if (loginId.isEmpty) {
+        try {
+          final session = await SessionService.getSession();
+          if (session != null &&
+              session.role == UserRole.student.name &&
+              session.userId.trim().isNotEmpty) {
+            loginId = session.userId.trim();
+          }
+        } catch (_) {}
+      }
+      var active = _studentId.trim();
+      if (active.isEmpty) {
+        active = await LinkedStudentService.effectiveStudentId(
+            loginStudentId: loginId);
+      } else if (loginId.isNotEmpty && active != loginId) {
+        // Constructor-provided active id: honour only while still linked.
+        final ok = await LinkedStudentService.isLinked(
+            loginStudentId: loginId, targetId: active);
+        if (!ok) active = loginId;
+      }
+      if (active.isEmpty) active = loginId;
+      if (!mounted) return;
+      setState(() {
+        _loginStudentId = loginId;
+        _studentId = active;
+        _notifUserId = active;
+        _isViewingLinked =
+            loginId.isNotEmpty && active.isNotEmpty && loginId != active;
+      });
+      if (active.isNotEmpty) {
+        LanguageService.bind(role: 'student', userId: active);
+      }
+    } catch (_) {}
+  }
+
+  /// Loads whether this login has linked family accounts (drives the
+  /// conditional "Switch Student" button — hidden otherwise).
+  Future<void> _loadLinkedState() async {
+    try {
+      var loginId = _loginStudentId.trim();
+      if (loginId.isEmpty) {
+        loginId = await LinkedStudentService.getLoginStudentId();
+      }
+      if (loginId.isEmpty || !mounted) return;
+      final linked =
+          await LinkedStudentService.fetchLinkedStudents(loginId);
+      if (!mounted) return;
+      setState(() {
+        _hasLinked = linked.length >= 2;
+        if (_loginStudentId.isEmpty) _loginStudentId = loginId;
+        if (_studentId.isEmpty) {
+          _studentId = loginId;
+          _notifUserId = loginId;
+        }
+        _isViewingLinked = _studentId.isNotEmpty &&
+            _loginStudentId.isNotEmpty &&
+            _studentId != _loginStudentId;
+      });
+    } catch (_) {}
+  }
+
+  /// Opens the Switch Student sheet and swaps to the verified selection
+  /// instantly — no logout, no credentials.
+  Future<void> _openSwitcher() async {
+    var loginId = _loginStudentId.trim();
+    if (loginId.isEmpty) {
+      loginId = await LinkedStudentService.getLoginStudentId();
+    }
+    if (loginId.isEmpty || !mounted) return;
+    final row = await showSwitchStudentSheet(
+      context,
+      loginStudentId: loginId,
+      activeStudentId:
+          _studentId.trim().isEmpty ? loginId : _studentId.trim(),
+    );
+    if (row == null || !mounted) return;
+    final targetId = (row['id'] ?? '').toString().trim();
+    if (targetId.isEmpty) return;
+    if (targetId == _studentId.trim()) return;
+    final photoRaw = (row['photo_url'] ?? '').toString();
+    Navigator.pushReplacement(
+      context,
+      SlidePageRoute(
+        page: StudentDashboard(
+          fullName: ((row['full_name'] ?? '').toString().trim().isEmpty)
+              ? (row['username'] ?? widget.fullName).toString()
+              : (row['full_name'] ?? '').toString(),
+          photoUrl: photoRaw,
+          section: (row['section'] ?? '').toString(),
+          studentId: targetId,
+          loginStudentId: loginId,
+        ),
+      ),
+    );
+  }
+
+  /// Resolves the ACTIVE student's row id for the notification bell.
   /// Falls back to a `students` lookup by name: on shared devices the
   /// single saved session may belong to another role's last login.
   Future<void> _loadNotifIdentity() async {
     try {
-      final session = await SessionService.getSession();
+      await _resolveIdentity();
       if (!mounted) return;
-      final role = (session?.role ?? '').trim().toLowerCase();
-      if (session != null &&
-          role == UserRole.student.name &&
-          session.userId.isNotEmpty) {
-        setState(() => _notifUserId = session.userId);
-        LanguageService.bind(role: 'student', userId: session.userId);
+      if (_studentId.isNotEmpty) {
+        setState(() => _notifUserId = _studentId);
+        LanguageService.bind(role: 'student', userId: _studentId);
         return;
       }
     } catch (_) {}
@@ -122,41 +250,56 @@ class _StudentDashboardState extends State<StudentDashboard> {
     } catch (_) {}
   }
 
+  /// Suspends access when the ACTIVE student is suspended (§13 — the
+  /// switch feature never bypasses suspension). The login account is
+  /// checked too, so a suspended login cannot linger either.
   Future<void> _guardSuspension() async {
     try {
-      final session = await SessionService.getSession();
-      if (session == null || session.role != UserRole.student.name) return;
-      final auth = AuthService();
-      final profile = await auth.getUserById(
-        userId: session.userId,
-        role: UserRole.student,
-      );
-      if (!AuthService.isSuspended(profile)) return;
-      await auth.logout();
+      await _resolveIdentity();
       if (!mounted) return;
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const LoginScreen(suspendedNotice: true),
-        ),
-        (_) => false,
-      );
+      final auth = AuthService();
+      final idsToCheck = <String>{
+        if (_studentId.trim().isNotEmpty) _studentId.trim(),
+        if (_loginStudentId.trim().isNotEmpty) _loginStudentId.trim(),
+      };
+      if (idsToCheck.isEmpty) {
+        final session = await SessionService.getSession();
+        if (session == null || session.role != UserRole.student.name) return;
+        idsToCheck.add(session.userId);
+      }
+      for (final id in idsToCheck) {
+        final profile = await auth.getUserById(
+          userId: id,
+          role: UserRole.student,
+        );
+        if (!AuthService.isSuspended(profile)) continue;
+        await LinkedStudentService.clearActiveStudent();
+        await auth.logout();
+        if (!mounted) return;
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const LoginScreen(suspendedNotice: true),
+          ),
+          (_) => false,
+        );
+        return;
+      }
     } catch (_) {}
   }
 
   String _norm(String? v) => (v ?? '').trim().toLowerCase();
 
   /// Your Progress card data: live attendance + memory percentages and
-  /// the Admin's participation / discipline / star evaluation.
+  /// the Admin's participation / discipline / star evaluation — always
+  /// for the ACTIVE (viewed) student, never the login account.
   Future<void> _loadProgress() async {
     try {
-      var sid = '';
-      try {
-        final session = await SessionService.getSession();
-        if (session != null && session.role == UserRole.student.name) {
-          sid = session.userId;
-        }
-      } catch (_) {}
+      var sid = _studentId.trim();
+      if (sid.isEmpty) {
+        sid = await LinkedStudentService.effectiveStudentId(
+            loginStudentId: _loginStudentId);
+      }
       sid = sid.trim();
       if (sid.isEmpty && widget.fullName.trim().isNotEmpty) {
         try {
@@ -356,16 +499,16 @@ class _StudentDashboardState extends State<StudentDashboard> {
     } catch (_) {}
   }
 
-  /// Ids of my own decided leave applications.
+  /// Ids of the ACTIVE student's decided leave applications.
   Future<List<String>> _decidedLeaveIds() async {
     try {
-      String myId = '';
-      try {
-        final session = await SessionService.getSession();
-        if (session != null && session.role == UserRole.student.name) {
-          myId = session.userId;
-        }
-      } catch (_) {}
+      String myId = _studentId.trim();
+      if (myId.isEmpty) {
+        try {
+          myId = await LinkedStudentService.effectiveStudentId(
+              loginStudentId: _loginStudentId);
+        } catch (_) {}
+      }
       List<Map<String, dynamic>> mine = [];
       if (myId.isNotEmpty) {
         try {
@@ -438,13 +581,16 @@ class _StudentDashboardState extends State<StudentDashboard> {
   }
 
   /// Unread notice count for the Notice Board quick-link badge.
+  /// Uses the ACTIVE student id so the bell follows the viewed dashboard.
   Future<void> _loadNoticeUnread() async {
     try {
-      String key = '';
-      try {
-        final session = await SessionService.getSession();
-        key = session?.userId ?? '';
-      } catch (_) {}
+      String key = _studentId.trim();
+      if (key.isEmpty) {
+        try {
+          key = await LinkedStudentService.effectiveStudentId(
+              loginStudentId: _loginStudentId);
+        } catch (_) {}
+      }
       key = key.isEmpty ? 'name:${widget.fullName}' : key;
       final rows = await _client
           .from('notices')
@@ -463,7 +609,11 @@ class _StudentDashboardState extends State<StudentDashboard> {
   void _openAttendance() {
     Navigator.push(
       context,
-      SlidePageRoute(page: MyAttendance(fullName: widget.fullName)),
+      SlidePageRoute(
+          page: MyAttendance(
+        fullName: widget.fullName,
+        studentId: _studentId.trim().isEmpty ? null : _studentId.trim(),
+      )),
     );
   }
 
@@ -483,10 +633,18 @@ class _StudentDashboardState extends State<StudentDashboard> {
     }
     await Navigator.push(
       context,
-      SlidePageRoute(page: StudentMemoryVerse(section: section)),
+      SlidePageRoute(
+          page: StudentMemoryVerse(
+        section: section,
+        studentId: _studentId.trim().isEmpty ? null : _studentId.trim(),
+      )),
     );
     if (mounted) _loadBadges();
   }
+
+  /// Active student id for sub-pages (never empty-string).
+  String? get _activeIdOrNull =>
+      _studentId.trim().isEmpty ? null : _studentId.trim();
 
   @override
   Widget build(BuildContext context) {
@@ -549,6 +707,13 @@ class _StudentDashboardState extends State<StudentDashboard> {
                     section: widget.section,
                   ),
                 ),
+                if (_hasLinked)
+                  IconButton(
+                    icon: const Icon(Icons.switch_account_rounded),
+                    color: Colors.white,
+                    tooltip: 'Switch Student',
+                    onPressed: _openSwitcher,
+                  ),
                 IconButton(
                   icon: const Icon(Icons.logout_rounded),
                   color: Colors.white,
@@ -571,6 +736,18 @@ class _StudentDashboardState extends State<StudentDashboard> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           FadeInSlide(index: 0, child: _welcomeCard()),
+                          if (_hasLinked) ...[
+                            const SizedBox(height: 12),
+                            FadeInSlide(
+                                index: 0,
+                                child: _switchStudentCard()),
+                          ],
+                          if (_isViewingLinked) ...[
+                            const SizedBox(height: 12),
+                            FadeInSlide(
+                                index: 0,
+                                child: _viewingAsBanner()),
+                          ],
                           const SizedBox(height: 20),
                           FadeInSlide(
                               index: 1,
@@ -696,7 +873,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
                                   SlidePageRoute(
                                       page: StudentLeaveApplicationPage(
                                           fullName: widget.fullName,
-                                          section: widget.section))).then(
+                                          section: widget.section,
+                                          studentId: _activeIdOrNull))).then(
                                   (_) => _loadBadges()),
                             ),
                           ),
@@ -717,7 +895,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
                                   SlidePageRoute(
                                       page: StudentNoticeBoardPage(
                                           studentName:
-                                              widget.fullName))).then(
+                                              widget.fullName,
+                                          studentId: _activeIdOrNull))).then(
                                   (_) => _loadNoticeUnread()),
                             ),
                           ),
@@ -778,6 +957,27 @@ class _StudentDashboardState extends State<StudentDashboard> {
                                 SlidePageRoute(
                                   page: StudentPrayerRequestPage(
                                     studentName: widget.fullName,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FadeInSlide(
+                            index: 12,
+                            child: DashQuickLink(
+                              icon: Icons.workspace_premium_rounded,
+                              title: '🏆 Certificates',
+                              subtitle:
+                                  'Your published achievement certificates',
+                              color: const Color(0xFFB45309),
+                              colorEnd: const Color(0xFFF59E0B),
+                              onTap: () => Navigator.push(
+                                context,
+                                SlidePageRoute(
+                                  page: StudentCertificatesPage(
+                                    studentName: widget.fullName,
+                                    studentId: _activeIdOrNull,
                                   ),
                                 ),
                               ),
@@ -935,6 +1135,101 @@ class _StudentDashboardState extends State<StudentDashboard> {
           ),
         ),
       ],
+    );
+  }
+
+  /// "Switch Student" card — visible ONLY for students who actually
+  /// have Admin-linked accounts (§4). Tapping opens the linked profiles.
+  Widget _switchStudentCard() {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: _openSwitcher,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF063B2E), Color(0xFF0E9F6E)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0E9F6E).withValues(alpha: 0.35),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.switch_account_rounded,
+                    color: Colors.white, size: 26),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Switch Student',
+                        style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white)),
+                    const SizedBox(height: 2),
+                    Text('View a linked family dashboard — no logout',
+                        style: GoogleFonts.poppins(
+                            fontSize: 12.5,
+                            color:
+                                Colors.white.withValues(alpha: 0.9))),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded,
+                  size: 17, color: Colors.white),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Current-student indicator (§8): shown while viewing a linked (non
+  /// login) dashboard so it is always clear whose data is on screen.
+  Widget _viewingAsBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0E9F6E).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: const Color(0xFF0E9F6E).withValues(alpha: 0.3)),
+      ),
+      child: Row(children: [
+        const Icon(Icons.verified_user_rounded,
+            size: 20, color: Color(0xFF0E9F6E)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text('Viewing: ${widget.fullName} — Current Student',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF065F46))),
+        ),
+      ]),
     );
   }
 

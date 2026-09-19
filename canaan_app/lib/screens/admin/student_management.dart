@@ -10,7 +10,9 @@ import 'std_photo.dart';
 import 'std_suspension.dart';
 import 'student_details.dart';
 import 'add_student.dart';
+import 'certificates.dart';
 import 'leave_applications.dart';
+import 'linked_students.dart';
 import 'student_applications.dart';
 import 'student_id_cards.dart';
 import 'student_progress.dart';
@@ -372,6 +374,48 @@ class StudentManagement extends StatelessWidget {
                       context,
                       SlidePageRoute(
                         page: const StudentIdCardsPage(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            if (!isLocked) const SizedBox(height: 12),
+            if (!isLocked)
+              FadeInSlide(
+                index: 11,
+                child: _OptionCard(
+                  icon: Icons.family_restroom_rounded,
+                  title: 'Linked Students',
+                  subtitle: 'Link siblings so families can switch accounts',
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF063B2E), Color(0xFF0E9F6E)],
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      SlidePageRoute(
+                        page: const LinkedStudentsPage(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            if (!isLocked) const SizedBox(height: 12),
+            if (!isLocked)
+              FadeInSlide(
+                index: 12,
+                child: _OptionCard(
+                  icon: Icons.workspace_premium_rounded,
+                  title: 'Certificates',
+                  subtitle: 'Issue Rank 1–3 achievement certificates',
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFB45309), Color(0xFFF59E0B)],
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      SlidePageRoute(
+                        page: const AdminCertificatesPage(),
                       ),
                     );
                   },

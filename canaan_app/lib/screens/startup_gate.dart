@@ -2,14 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/app_update_service.dart';
 import 'auth_gate.dart';
+import 'update_available_screen.dart';
+import 'update_success_screen.dart';
 import 'welcome_screen.dart';
 
-/// App entry point: short splash, then first-launch welcome
+/// App entry point: splash → update check → first-launch welcome
 /// or the existing login/session flow.
 ///
-/// Returning users go straight to [AuthGate] (which restores the
-/// Supabase session); only fresh installs see [WelcomeScreen].
+/// Update behaviour:
+/// - Newer APK released  → Update Available screen (force blocks).
+/// - Just updated        → one-time success box, then normal flow.
+/// - Up to date/offline  → straight through, nothing shown.
 class StartupGate extends StatefulWidget {
   const StartupGate({super.key});
 
@@ -31,16 +36,59 @@ class _StartupGateState extends State<StartupGate> {
       completed = prefs.getBool('canaan_onboarding_completed') ?? false;
     } catch (_) {}
     if (!mounted) return;
+
+    // 1. Self-update check (silent on failure/offline/non-Android).
+    final result = await AppUpdateService.checkAtStartup();
+    if (!mounted) return;
+
+    // 2. Newer APK available → update screen (blocks when forced).
+    if (result?.update != null) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => UpdateAvailableScreen(update: result!.update!),
+        ),
+      );
+      if (!mounted) return;
+    }
+
+    // 3. Just updated → one-time success box for this version.
+    if (result != null &&
+        result.updatedSinceLastRun &&
+        result.previousName != null &&
+        result.previousName != result.installedName) {
+      final alreadyShown = await AppUpdateService.successAlreadyShown(
+          result.installedName);
+      if (!mounted) return;
+      if (!alreadyShown) {
+        List<String> whatsNew = [];
+        try {
+          final remote = await AppUpdateService.fetchRemoteUpdate();
+          if (remote != null &&
+              remote.versionCode == result.installedCode) {
+            whatsNew = remote.whatsNew;
+          }
+        } catch (_) {}
+        if (!mounted) return;
+        await showUpdateSuccessDialog(
+          context,
+          previousName: result.previousName!,
+          currentName: result.installedName,
+          whatsNew: whatsNew,
+        );
+        await AppUpdateService.markSuccessShown(result.installedName);
+        if (!mounted) return;
+      }
+    }
+
+    // 4. Normal flow, exactly as before.
     if (completed) {
-      // Existing user: straight into the normal session flow
-      // (AuthGate shows its own splash while restoring login).
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const AuthGate()),
       );
       return;
     }
-    // First launch: brief splash beat, then the welcome experience.
     await Future.delayed(const Duration(milliseconds: 900));
     if (!mounted) return;
     Navigator.pushReplacement(

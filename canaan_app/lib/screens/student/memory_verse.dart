@@ -4,8 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/recitation_service.dart';
 import '../../services/seen_store.dart';
-import '../../services/session_service.dart';
-import '../../services/auth_service.dart';
+import '../../services/linked_student_service.dart';
 
 /// Student Dashboard → Quick Links → Memory Verse.
 ///
@@ -13,7 +12,12 @@ import '../../services/auth_service.dart';
 /// newest first. View-only: no create, edit or delete here.
 class StudentMemoryVerse extends StatefulWidget {
   final String section;
-  const StudentMemoryVerse({super.key, required this.section});
+
+  /// Active (viewed) student id — recitation statuses load for this
+  /// student, never the login account.
+  final String? studentId;
+  const StudentMemoryVerse(
+      {super.key, required this.section, this.studentId});
 
   @override
   State<StudentMemoryVerse> createState() => _StudentMemoryVerseState();
@@ -76,20 +80,22 @@ class _StudentMemoryVerseState extends State<StudentMemoryVerse> {
     }
   }
 
-  /// Loads ONLY this student's recitation statuses (own session id),
-  /// keyed by verse id so each verse shows its own result.
+  /// Loads ONLY the ACTIVE student's recitation statuses (verified
+  /// linked selection), keyed by verse id so each verse shows its own
+  /// result.
   Future<Map<int, String>> _fetchMyStatuses() async {
     try {
-      final session = await SessionService.getSession();
-      if (session == null || session.role != UserRole.student.name) {
-        return {};
+      var sid = (widget.studentId ?? '').trim();
+      if (sid.isEmpty) {
+        sid = await LinkedStudentService.effectiveStudentId();
       }
+      if (sid.isEmpty) return {};
       final table = RecitationService.sectionTable(widget.section);
       if (table == null) return {};
       final rows = await _client
           .from(table)
           .select('verse_id, status')
-          .eq('student_id', session.userId)
+          .eq('student_id', sid)
           .order('date', ascending: false)
           .order('id', ascending: false);
       final map = <int, String>{};

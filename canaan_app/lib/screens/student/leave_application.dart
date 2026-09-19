@@ -4,11 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../services/auth_service.dart';
+import '../../services/linked_student_service.dart';
 import '../../services/leave_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/seen_store.dart';
-import '../../services/session_service.dart';
 import '../../widgets/animations.dart';
 
 /// Student Dashboard → Quick Links → Leave Application.
@@ -20,10 +19,15 @@ import '../../widgets/animations.dart';
 class StudentLeaveApplicationPage extends StatefulWidget {
   final String fullName;
   final String? section;
+
+  /// Active (viewed) student id — applications list + submits for this
+  /// student, never the login account.
+  final String? studentId;
   const StudentLeaveApplicationPage({
     super.key,
     required this.fullName,
     this.section,
+    this.studentId,
   });
 
   @override
@@ -83,17 +87,20 @@ class _StudentLeaveApplicationPageState
   Future<void> _loadStudent() async {
     try {
       Map<String, dynamic>? row;
-      try {
-        final session = await SessionService.getSession();
-        if (session != null && session.role == UserRole.student.name) {
+      var sid = (widget.studentId ?? '').trim();
+      sid = sid.isEmpty
+          ? await LinkedStudentService.effectiveStudentId()
+          : sid;
+      if (sid.isNotEmpty) {
+        try {
           final res = await _client
               .from('students')
               .select('id, full_name, email, section')
-              .eq('id', session.userId)
+              .eq('id', sid)
               .maybeSingle();
           if (res != null) row = Map<String, dynamic>.from(res);
-        }
-      } catch (_) {}
+        } catch (_) {}
+      }
       if (row == null && widget.fullName.isNotEmpty) {
         try {
           final res = await _client
