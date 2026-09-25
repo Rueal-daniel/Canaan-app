@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../services/language_service.dart';
+import '../widgets/notice_rich_text.dart';
+
 /// One-time "Canaan Updated Successfully" box. Shown as a dialog over
 /// the splash right after an update, then never again for that version.
+/// Uses the Admin's exact formatted update description.
 Future<void> showUpdateSuccessDialog(
   BuildContext context, {
   required String previousName,
   required String currentName,
-  required List<String> whatsNew,
+  List<String> whatsNew = const [],
+  String descriptionHtml = '',
 }) {
   return showDialog(
     context: context,
@@ -42,14 +47,14 @@ Future<void> showUpdateSuccessDialog(
                       color: Colors.white, size: 34),
                 ),
                 const SizedBox(height: 12),
-                Text('Canaan Updated Successfully 🎉',
+                Text(tr('upd_success'),
                     textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
                         color: Colors.white)),
                 const SizedBox(height: 6),
-                Text('Version $previousName → $currentName',
+                Text('${tr('upd_version')} $previousName → $currentName',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(
                         fontSize: 13.5,
@@ -62,8 +67,28 @@ Future<void> showUpdateSuccessDialog(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (whatsNew.isNotEmpty) ...[
-                    Text("What's New",
+                  if (descriptionHtml.trim().isNotEmpty &&
+                      !noticeHtmlIsEmpty(descriptionHtml)) ...[
+                    Text(tr('upd_whats_new'),
+                        style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF111827))),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: const Color(0xFFF1F5F9)),
+                      ),
+                      child: NoticeContentView(descriptionHtml),
+                    ),
+                    const SizedBox(height: 8),
+                  ] else if (whatsNew.isNotEmpty) ...[
+                    Text(tr('upd_whats_new'),
                         style: GoogleFonts.poppins(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
@@ -116,9 +141,9 @@ Future<void> showUpdateSuccessDialog(
                             borderRadius: BorderRadius.circular(12)),
                         elevation: 0,
                       ),
-                      child: Text('Close',
-                          style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w700)),
+                    child: Text(tr('upd_close'),
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700)),
                     ),
                   ),
                   const SizedBox(height: 6),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/app_update_service.dart';
+import '../services/language_service.dart';
 
 /// Real APK download with byte-accurate progress, then handoff to the
 /// Android system installer. Cancel is offered for optional updates.
@@ -120,7 +121,7 @@ class _UpdatingScreenState extends State<UpdatingScreen> {
               ),
             ),
           ),
-          title: Text('Downloading Update',
+          title: Text(tr('upd_downloading'),
               style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w600, color: Colors.white)),
           iconTheme: const IconThemeData(color: Colors.white),
@@ -216,12 +217,12 @@ class _UpdatingScreenState extends State<UpdatingScreen> {
           ),
         ],
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Downloading Update…',
-            style: GoogleFonts.poppins(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF111827))),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(tr('upd_downloading'),
+                style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF111827))),
         const SizedBox(height: 12),
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
@@ -243,8 +244,8 @@ class _UpdatingScreenState extends State<UpdatingScreen> {
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Text(
               total != null
-                  ? 'Downloaded: ${AppUpdateService.formatMB(received)} MB / ${AppUpdateService.formatMB(total)} MB'
-                  : 'Downloaded: ${AppUpdateService.formatMB(received)} MB',
+                  ? '${tr('upd_downloaded')}: ${AppUpdateService.formatMB(received)} MB / ${AppUpdateService.formatMB(total)} MB'
+                  : '${tr('upd_downloaded')}: ${AppUpdateService.formatMB(received)} MB',
               style: GoogleFonts.poppins(
                   fontSize: 12.5, color: Colors.grey.shade600)),
           if (pct != null)
@@ -262,7 +263,7 @@ class _UpdatingScreenState extends State<UpdatingScreen> {
             child: OutlinedButton.icon(
               onPressed: _cancel,
               icon: const Icon(Icons.cancel_rounded, size: 18),
-              label: Text('Cancel',
+              label: Text(tr('upd_cancel'),
                   style:
                       GoogleFonts.poppins(fontWeight: FontWeight.w700)),
               style: OutlinedButton.styleFrom(
@@ -352,7 +353,7 @@ class _UpdatingScreenState extends State<UpdatingScreen> {
           const Icon(Icons.error_outline_rounded,
               color: Color(0xFFEF4444), size: 22),
           const SizedBox(width: 10),
-          Text('Download Failed',
+          Text(tr('upd_failed'),
               style: GoogleFonts.poppins(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
@@ -370,7 +371,7 @@ class _UpdatingScreenState extends State<UpdatingScreen> {
               child: ElevatedButton.icon(
                 onPressed: _retry,
                 icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: Text('Retry',
+                label: Text(tr('upd_retry'),
                     style:
                         GoogleFonts.poppins(fontWeight: FontWeight.w700)),
                 style: ElevatedButton.styleFrom(
@@ -396,7 +397,7 @@ class _UpdatingScreenState extends State<UpdatingScreen> {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: Text('Cancel',
+                  child: Text(tr('upd_cancel'),
                       style: GoogleFonts.poppins(
                           fontWeight: FontWeight.w700)),
                 ),

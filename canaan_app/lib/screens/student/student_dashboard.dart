@@ -17,6 +17,7 @@ import '../../services/progress_service.dart';
 import '../../services/seen_store.dart';
 import '../../services/session_service.dart';
 import '../../widgets/alert_popup.dart';
+import '../../screens/app_update_popup.dart';
 import '../../widgets/notification_bell.dart';
 import '../../widgets/star_rating.dart';
 import '../../widgets/switch_student_sheet.dart';
@@ -123,11 +124,16 @@ class _StudentDashboardState extends State<StudentDashboard> {
         studentId: _activeIdOrNull,
       ),
     );
+    // App-update popup when Admin publishes a newer version.
+    _updatePopups.start(context);
   }
+
+  final _updatePopups = AppUpdatePopupWatcher();
 
   @override
   void dispose() {
     _alertPopups.dispose();
+    _updatePopups.dispose();
     _suspensionTimer?.cancel();
     for (final s in _realtimeSubs) {
       s.cancel();

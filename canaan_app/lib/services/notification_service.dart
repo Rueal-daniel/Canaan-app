@@ -80,6 +80,8 @@ class NotificationService {
   static const destCertificates = 'certificates'; // → Certificates page
   static const destAlerts = 'alerts'; // → Alerts inbox
   static const destComplaints = 'complaints'; // Admin → Complaints
+  static const destAppUpdate = 'app_update'; // → Update Available popup
+  static const typeAppUpdate = 'app_update';
 
   static const _archiveLastRunKey = 'canaan_notif_archive_last_run';
   static const _archiveRetentionDays = 90;

@@ -4,17 +4,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/app_update_service.dart';
 import 'auth_gate.dart';
-import 'update_available_screen.dart';
+import 'app_update_popup.dart';
 import 'update_success_screen.dart';
 import 'welcome_screen.dart';
 
-/// App entry point: splash → update check → first-launch welcome
-/// or the existing login/session flow.
+/// App entry point: splash → Admin-controlled update check →
+/// first-launch welcome or the existing login/session flow.
 ///
-/// Update behaviour:
-/// - Newer APK released  → Update Available screen (force blocks).
-/// - Just updated        → one-time success box, then normal flow.
-/// - Up to date/offline  → straight through, nothing shown.
+/// Update behaviour (Supabase `app_updates` table):
+/// - Newer published APK → Update Available popup (force blocks).
+/// - Just updated       → one-time success box, then normal flow.
+/// - Up to date/offline → straight through, nothing shown.
 class StartupGate extends StatefulWidget {
   const StartupGate({super.key});
 
@@ -37,36 +37,30 @@ class _StartupGateState extends State<StartupGate> {
     } catch (_) {}
     if (!mounted) return;
 
-    // 1. Self-update check (silent on failure/offline/non-Android).
+    // 1. Admin-controlled update check (silent on failure/offline).
     final result = await AppUpdateService.checkAtStartup();
     if (!mounted) return;
 
-    // 2. Newer APK available → update screen (blocks when forced).
-    if (result?.update != null) {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => UpdateAvailableScreen(update: result!.update!),
-        ),
-      );
+    // 2. Newer APK published → update popup (blocks when Required).
+    if (result.update != null) {
+      await showAppUpdateDialog(context, result.update!);
       if (!mounted) return;
     }
 
-    // 3. Just updated → one-time success box for this version.
-    if (result != null &&
-        result.updatedSinceLastRun &&
+    // 3. Just updated → one-time success box with the Admin's text.
+    if (result.updatedSinceLastRun &&
         result.previousName != null &&
         result.previousName != result.installedName) {
       final alreadyShown = await AppUpdateService.successAlreadyShown(
           result.installedName);
       if (!mounted) return;
       if (!alreadyShown) {
-        List<String> whatsNew = [];
+        String whatsNewHtml = '';
         try {
-          final remote = await AppUpdateService.fetchRemoteUpdate();
-          if (remote != null &&
-              remote.versionCode == result.installedCode) {
-            whatsNew = remote.whatsNew;
+          final active = await AppUpdateService.fetchActiveUpdate();
+          if (active != null &&
+              active.versionCode == result.installedCode) {
+            whatsNewHtml = active.descriptionHtml;
           }
         } catch (_) {}
         if (!mounted) return;
@@ -74,7 +68,7 @@ class _StartupGateState extends State<StartupGate> {
           context,
           previousName: result.previousName!,
           currentName: result.installedName,
-          whatsNew: whatsNew,
+          descriptionHtml: whatsNewHtml,
         );
         await AppUpdateService.markSuccessShown(result.installedName);
         if (!mounted) return;

@@ -11,6 +11,7 @@ import 'lesson_plan.dart';
 import 'notice_board.dart';
 import 'school_gallery.dart';
 import 'student_update.dart';
+import 'update_link.dart';
 
 /// Admin Dashboard → Management.
 ///
@@ -217,6 +218,26 @@ class ManagementScreen extends StatelessWidget {
                     context,
                     SlidePageRoute(
                         page: AdminComplaintsPage(
+                            adminName: adminName)),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            FadeInSlide(
+              index: 8,
+              child: _OptionCard(
+                icon: Icons.link_rounded,
+                title: tr('nav_update_link'),
+                subtitle: 'Publish app updates with APK download link',
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0B2A5B), Color(0xFF1565C0)],
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    SlidePageRoute(
+                        page: AdminUpdateLinkPage(
                             adminName: adminName)),
                   );
                 },

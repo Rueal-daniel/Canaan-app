@@ -1,15 +1,97 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../config/update_config.dart';
+/// Admin-controlled app update system, backed by the `app_updates`
+/// table (id, title, description, apk_url, version_name,
+/// version_code, force_update, status, created_by, created_at,
+/// updated_at, published_at).
+///
+/// Status: draft | published | unpublished. The ACTIVE update is the
+/// highest-versionCode published row. An update popup appears ONLY
+/// when published versionCode > installed versionCode — creating or
+/// editing records never triggers anything by itself.
+class AppUpdate {
+  final String id;
+  final String title;
+  final String descriptionHtml;
+  final String apkUrl;
+  final String versionName;
+  final int versionCode;
+  final bool forceUpdate;
+  final String status;
+  final String? publishedAt;
+  final String? createdAt;
 
-/// Remote update descriptor (validated before use).
+  const AppUpdate({
+    required this.id,
+    required this.title,
+    required this.descriptionHtml,
+    required this.apkUrl,
+    required this.versionName,
+    required this.versionCode,
+    required this.forceUpdate,
+    required this.status,
+    this.publishedAt,
+    this.createdAt,
+  });
+
+  /// Validated parse: rejects bad APK URLs (HTTPS + .apk only, no
+  /// credentials), empty titles/versions, non-positive codes.
+  static AppUpdate? fromRow(Map<String, dynamic> row) {
+    try {
+      final title = (row['title'] ?? '').toString().trim();
+      final apkUrl = (row['apk_url'] ?? '').toString().trim();
+      final versionName = (row['version_name'] ?? '').toString().trim();
+      final versionCode = int.tryParse('${row['version_code']}');
+      if (title.isEmpty || versionName.isEmpty || versionCode == null) {
+        return null;
+      }
+      if (versionCode <= 0) return null;
+      final uri = Uri.tryParse(apkUrl);
+      if (uri == null ||
+          uri.scheme != 'https' ||
+          !uri.path.toLowerCase().endsWith('.apk') ||
+          uri.userInfo.isNotEmpty) {
+        return null;
+      }
+      final force = row['force_update'] == true ||
+          '${row['force_update']}'.toLowerCase() == 'true';
+      return AppUpdate(
+        id: (row['id'] ?? '').toString(),
+        title: title,
+        descriptionHtml: (row['description'] ?? '').toString(),
+        apkUrl: apkUrl,
+        versionName: versionName,
+        versionCode: versionCode,
+        forceUpdate: force,
+        status: (row['status'] ?? '').toString(),
+        publishedAt: row['published_at']?.toString(),
+        createdAt: row['created_at']?.toString(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Download descriptor for the existing [UpdatingScreen].
+  RemoteUpdate toRemote() => RemoteUpdate(
+        versionName: versionName,
+        versionCode: versionCode,
+        apkUrl: apkUrl,
+        updateTitle: title,
+        updateDescription: '',
+        whatsNew: const [],
+        forceUpdate: forceUpdate,
+      );
+}
+
+/// Validated remote APK descriptor used by the downloader/installer.
 class RemoteUpdate {
   final String versionName;
   final int versionCode;
@@ -28,69 +110,6 @@ class RemoteUpdate {
     required this.whatsNew,
     required this.forceUpdate,
   });
-
-  /// Returns null when the payload is missing/invalid anything.
-  static RemoteUpdate? parse(dynamic json) {
-    try {
-      if (json is! Map) return null;
-      final versionName = (json['versionName'] ?? '').toString().trim();
-      final versionCode = int.tryParse('${json['versionCode']}');
-      final apkUrl = (json['apkUrl'] ?? '').toString().trim();
-      if (versionName.isEmpty || versionCode == null || versionCode <= 0) {
-        return null;
-      }
-      final uri = Uri.tryParse(apkUrl);
-      // HTTPS only, must point at an .apk file. No credentials in URLs.
-      if (uri == null ||
-          uri.scheme != 'https' ||
-          !uri.path.toLowerCase().endsWith('.apk') ||
-          (uri.userInfo.isNotEmpty)) {
-        return null;
-      }
-      final whatsNew = <String>[];
-      final rawList = json['whatsNew'];
-      if (rawList is List) {
-        for (final e in rawList) {
-          final s = e.toString().trim();
-          if (s.isNotEmpty) whatsNew.add(s);
-        }
-      }
-      return RemoteUpdate(
-        versionName: versionName,
-        versionCode: versionCode,
-        apkUrl: apkUrl,
-        updateTitle: (json['updateTitle'] ?? 'Canaan Update Available')
-            .toString()
-            .trim(),
-        updateDescription:
-            (json['updateDescription'] ?? 'A new version of Canaan is available.')
-                .toString()
-                .trim(),
-        whatsNew: whatsNew,
-        forceUpdate: json['forceUpdate'] == true,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-}
-
-/// Result of a startup update check.
-class UpdateCheckResult {
-  final RemoteUpdate? update;
-  final int installedCode;
-  final String installedName;
-  final bool updatedSinceLastRun;
-  final int? previousCode;
-  final String? previousName;
-  const UpdateCheckResult({
-    required this.update,
-    required this.installedCode,
-    required this.installedName,
-    required this.updatedSinceLastRun,
-    this.previousCode,
-    this.previousName,
-  });
 }
 
 class DownloadProgress {
@@ -101,36 +120,37 @@ class DownloadProgress {
       total == null || total! <= 0 ? null : received / total!;
 }
 
-/// Self-update engine: version check, real APK download with byte
-/// progress, file validation, and handoff to the Android installer.
-/// No new packages — HttpClient, path_provider and SharedPreferences
-/// only (plus one tiny native channel for version/install).
 class AppUpdateService {
+  static const table = 'app_updates';
   static const _channel = MethodChannel('canaan_app/update');
+
+  static const statusDraft = 'draft';
+  static const statusPublished = 'published';
+  static const statusUnpublished = 'unpublished';
 
   static const _kLastKnownCode = 'canaan_update_last_known_code';
   static const _kLastKnownName = 'canaan_update_last_known_name';
   static const _kSuccessShownFor = 'canaan_update_success_shown_for';
   static const _kSkippedCode = 'canaan_update_skipped_code';
 
-  static const Duration _configTimeout = Duration(seconds: 8);
+  static const Duration _timeout = Duration(seconds: 10);
 
-  // -- installed version -------------------------------------------------------
+  static SupabaseClient get _client => Supabase.instance.client;
+
+  // -- installed version ---------------------------------------------------------
 
   /// Installed Android versionCode, or null on non-Android / failure.
   static Future<int?> installedVersionCode() async {
     if (kIsWeb) return null;
     if (!Platform.isAndroid) return null;
     try {
-      final code = await _channel.invokeMethod<int>('getVersionCode');
-      return code;
+      return await _channel.invokeMethod<int>('getVersionCode');
     } catch (_) {
       return null;
     }
   }
 
-  /// Installed versionName from the Android package (never hardcoded,
-  /// so it always matches pubspec `version: <name>+<code>`).
+  /// Installed versionName from the Android package (never hardcoded).
   static Future<String?> installedVersionName() async {
     if (kIsWeb) return null;
     if (!Platform.isAndroid) return null;
@@ -142,82 +162,86 @@ class AppUpdateService {
     }
   }
 
-  // -- remote config --------------------------------------------------------------
+  // -- active update -----------------------------------------------------------------
 
-  static Future<RemoteUpdate?> fetchRemoteUpdate() async {
-    final configUri = Uri.tryParse(UpdateConfig.updateConfigUrl);
-    if (configUri == null || configUri.scheme != 'https') return null;
-    final client = HttpClient()
-      ..connectionTimeout = _configTimeout;
+  /// The active update: highest-versionCode published row, validated.
+  /// Null when none exists, Supabase is unreachable, or data invalid.
+  static Future<AppUpdate?> fetchActiveUpdate() async {
     try {
-      final req = await client
-          .getUrl(configUri)
-          .timeout(_configTimeout);
-      final res = await req.close().timeout(_configTimeout);
-      if (res.statusCode != 200) return null;
-      final body = await res
-          .transform(utf8.decoder)
-          .join()
-          .timeout(_configTimeout);
-      if (body.trim().isEmpty || body.length > 100 * 1024) return null;
-      return RemoteUpdate.parse(jsonDecode(body));
+      final rows = await _client
+          .from(table)
+          .select('*')
+          .eq('status', statusPublished)
+          .order('version_code', ascending: false)
+          .limit(3);
+      for (final r in (rows as List)) {
+        final u =
+            AppUpdate.fromRow(Map<String, dynamic>.from(r as Map));
+        if (u != null) return u;
+      }
+      return null;
     } catch (_) {
       return null;
-    } finally {
-      client.close(force: true);
     }
   }
 
-  /// True ONLY when the released APK's versionCode is higher than the
-  /// installed one. Website/database/message changes never trigger it.
-  static bool shouldUpdate(int? installedCode, RemoteUpdate? remote) {
+  /// True ONLY when the published APK's versionCode is higher than the
+  /// installed one. Record creation, edits, notices or alerts never
+  /// trigger it.
+  static bool shouldUpdate(int? installedCode, AppUpdate? remote) {
     if (installedCode == null || remote == null) return false;
     return remote.versionCode > installedCode;
   }
 
-  // -- startup check -----------------------------------------------------------------
+  static Future<List<Map<String, dynamic>>> fetchHistory() async {
+    try {
+      final rows = await _client
+          .from(table)
+          .select('*')
+          .order('version_code', ascending: false);
+      return List<Map<String, dynamic>>.from(rows);
+    } catch (_) {
+      return [];
+    }
+  }
 
-  /// Runs once at startup. Never throws; null-safe offline behaviour
-  /// is "proceed to the app".
-  static Future<UpdateCheckResult?> checkAtStartup() async {
+  // -- startup state -------------------------------------------------------------------
+
+  static Future<UpdateStartupState> checkAtStartup() async {
+    int? installedCode;
+    String installedName = '';
+    int? prevCode;
+    String? prevName;
+    AppUpdate? update;
     try {
       final prefs = await SharedPreferences.getInstance();
-      final installedCode = await installedVersionCode();
-      if (installedCode == null) return null; // not Android: no updates
-
-      final installedName =
-          await installedVersionName() ?? 'v$installedCode';
-      final prevCode = prefs.getInt(_kLastKnownCode);
-      final prevName = prefs.getString(_kLastKnownName);
-      final updated =
-          prevCode != null && prevCode != installedCode;
-
-      // Remember this version for next launch BEFORE any navigation.
+      installedCode = await installedVersionCode();
+      if (installedCode == null) {
+        return const UpdateStartupState.notAndroid();
+      }
+      installedName = await installedVersionName() ?? 'v$installedCode';
+      prevCode = prefs.getInt(_kLastKnownCode);
+      prevName = prefs.getString(_kLastKnownName);
       await prefs.setInt(_kLastKnownCode, installedCode);
       await prefs.setString(_kLastKnownName, installedName);
-
-      RemoteUpdate? update;
       try {
-        final remote = await fetchRemoteUpdate();
+        final remote = await fetchActiveUpdate()
+            .timeout(_timeout, onTimeout: () => null);
         if (shouldUpdate(installedCode, remote)) {
           final skipped = prefs.getInt(_kSkippedCode);
-          // "Later" skips prompting again for the same version this device
-          // already dismissed — a newer versionCode still prompts.
           if (skipped != remote!.versionCode) update = remote;
         }
       } catch (_) {}
-
-      return UpdateCheckResult(
-        update: update,
-        installedCode: installedCode,
-        installedName: installedName,
-        updatedSinceLastRun: updated,
-        previousCode: prevCode,
-        previousName: prevName,
-      );
-    } catch (_) {
-      return null;
-    }
+    } catch (_) {}
+    return UpdateStartupState(
+      update: update,
+      installedCode: installedCode,
+      installedName: installedName,
+      updatedSinceLastRun:
+          prevCode != null && installedCode != null && prevCode != installedCode,
+      previousCode: prevCode,
+      previousName: prevName,
+    );
   }
 
   static Future<void> markSkipped(int versionCode) async {
@@ -243,7 +267,7 @@ class AppUpdateService {
     } catch (_) {}
   }
 
-  // -- download --------------------------------------------------------------------------
+  // -- download ----------------------------------------------------------------------------
 
   static Future<Directory> _updatesDir() async {
     Directory base;
@@ -280,7 +304,7 @@ class AppUpdateService {
       } catch (_) {}
     }
 
-    final client = HttpClient()..connectionTimeout = _configTimeout;
+    final client = HttpClient()..connectionTimeout = _timeout;
     IOSink? sink;
     var received = 0;
     var cancelled = false;
@@ -296,11 +320,10 @@ class AppUpdateService {
       if (res.statusCode != 200) {
         throw HttpException('Server returned ${res.statusCode}');
       }
-      final total =
-          res.contentLength >= 0 ? res.contentLength : null;
+      final total = res.contentLength >= 0 ? res.contentLength : null;
       sink = file.openWrite();
       await for (final chunk in res) {
-        if (cancelled) throw _CancelledException();
+        if (cancelled) throw const _CancelledException();
         sink.add(chunk);
         received += chunk.length;
         onProgress(DownloadProgress(received, total));
@@ -308,7 +331,6 @@ class AppUpdateService {
       await sink.flush();
       await sink.close();
       sink = null;
-      // Validate: real, complete, actually-an-APK file.
       await verifyApk(file, expectedBytes: total);
       return file;
     } catch (e) {
@@ -336,7 +358,6 @@ class AppUpdateService {
     if (expectedBytes != null && expectedBytes > 0 && length != expectedBytes) {
       throw const FileSystemException('Download is incomplete');
     }
-    // APKs are ZIPs: must start with the PK magic header.
     final raf = await file.open();
     try {
       final header = await raf.read(4);
@@ -352,12 +373,14 @@ class AppUpdateService {
     }
   }
 
-  // -- install --------------------------------------------------------------------------------
+  // -- install ----------------------------------------------------------------------------------
 
   /// Hands the verified APK to Android's system installer.
   /// Returns null on success, or a user-facing error message.
   static Future<String?> installApk(File file) async {
-    if (!Platform.isAndroid) return 'APK install is only available on Android.';
+    if (!Platform.isAndroid) {
+      return 'APK install is only available on Android.';
+    }
     try {
       final res = await _channel
           .invokeMethod<String>('installApk', {'path': file.path});
@@ -375,6 +398,30 @@ class AppUpdateService {
 
   static String formatMB(int bytes) =>
       (bytes / (1024 * 1024)).toStringAsFixed(1);
+}
+
+class UpdateStartupState {
+  final AppUpdate? update;
+  final int? installedCode;
+  final String installedName;
+  final bool updatedSinceLastRun;
+  final int? previousCode;
+  final String? previousName;
+  const UpdateStartupState({
+    required this.update,
+    required this.installedCode,
+    required this.installedName,
+    required this.updatedSinceLastRun,
+    this.previousCode,
+    this.previousName,
+  });
+  const UpdateStartupState.notAndroid()
+      : update = null,
+        installedCode = null,
+        installedName = '',
+        updatedSinceLastRun = false,
+        previousCode = null,
+        previousName = null;
 }
 
 class _CancelledException implements Exception {

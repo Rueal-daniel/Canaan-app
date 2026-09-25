@@ -312,6 +312,24 @@ class AppStrings {
     'cmp_success_msg':
         'Your complaint has been submitted successfully. Admin will review it.',
     'cmp_have_problem': 'Having a problem? Report it here',
+    // -- app update ------------------------------------------------------------
+    'nav_update_link': 'Update Link',
+    'upd_available': 'Canaan App Update Available',
+    'upd_update': 'Update',
+    'upd_later': 'Later',
+    'upd_downloading': 'Downloading Update…',
+    'upd_downloaded': 'Downloaded',
+    'upd_complete': 'Update downloaded successfully.',
+    'upd_failed': 'Unable to download the update. Please check your internet connection and try again.',
+    'upd_retry': 'Try Again',
+    'upd_cancel': 'Cancel',
+    'upd_success': 'Canaan Updated Successfully',
+    'upd_whats_new': "What's New",
+    'upd_version': 'Version',
+    'upd_apk_link': 'APK Download Link',
+    'upd_publish': 'Publish Update',
+    'upd_close': 'Close',
+    'upd_required': 'Required',
   };
 
   static const _ne = <String, String>{
@@ -615,6 +633,24 @@ class AppStrings {
     'cmp_success_msg':
         'तपाईंको गुनासो सफलतापूर्वक पेश गरिएको छ। प्रशासकले समीक्षा गर्नुहुनेछ।',
     'cmp_have_problem': 'समस्या छ? यहाँ रिपोर्ट गर्नुहोस्',
+    // -- app update ------------------------------------------------------------
+    'nav_update_link': 'अपडेट लिङ्क',
+    'upd_available': 'कानान एप अपडेट उपलब्ध छ',
+    'upd_update': 'अपडेट',
+    'upd_later': 'पछि',
+    'upd_downloading': 'अपडेट डाउनलोड हुँदैछ…',
+    'upd_downloaded': 'डाउनलोड भयो',
+    'upd_complete': 'अपडेट सफलतापूर्वक डाउनलोड भयो।',
+    'upd_failed': 'अपडेट डाउनलोड गर्न सकिएन। कृपया इन्टरनेट जाँचेर पुनः प्रयास गर्नुहोस्।',
+    'upd_retry': 'पुनः प्रयास',
+    'upd_cancel': 'रद्द गर्नुहोस्',
+    'upd_success': 'कानान सफलतापूर्वक अपडेट भयो',
+    'upd_whats_new': 'नयाँ के छ',
+    'upd_version': 'संस्करण',
+    'upd_apk_link': 'APK डाउनलोड लिङ्क',
+    'upd_publish': 'अपडेट प्रकाशित गर्नुहोस्',
+    'upd_close': 'बन्द गर्नुहोस्',
+    'upd_required': 'आवश्यक',
   };
 
   static const shortMonthsNe = [

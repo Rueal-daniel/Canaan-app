@@ -15,6 +15,7 @@ import '../../services/notification_navigation.dart';
 import '../../services/seen_store.dart';
 import '../../services/session_service.dart';
 import '../../widgets/alert_popup.dart';
+import '../../screens/app_update_popup.dart';
 import '../../widgets/notification_bell.dart';
 import '../admin/student_management.dart';
 import '../login_screen.dart';
@@ -67,6 +68,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
   int _alertUnread = 0;
   final List<StreamSubscription> _realtimeSubs = [];
   final _alertPopups = AlertPopupWatcher();
+  final _updatePopups = AppUpdatePopupWatcher();
 
   @override
   void initState() {
@@ -120,11 +122,14 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
         teacherName: _teacherName ?? widget.fullName,
       ),
     );
+    // App-update popup when Admin publishes a newer version.
+    _updatePopups.start(context);
   }
 
   @override
   void dispose() {
     _alertPopups.dispose();
+    _updatePopups.dispose();
     _suspensionTimer?.cancel();
     for (final s in _realtimeSubs) {
       s.cancel();

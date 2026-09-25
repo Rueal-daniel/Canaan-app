@@ -14,6 +14,7 @@ import '../../services/session_service.dart';
 import '../../widgets/animations.dart';
 import '../../widgets/app_sidebar.dart';
 import '../../widgets/dashboard_design.dart';
+import '../../screens/app_update_popup.dart';
 import '../../widgets/notification_bell.dart';
 import 'student_management.dart';
 import 'teacher_management.dart';
@@ -85,6 +86,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   @override
   void dispose() {
+    _updatePopups.dispose();
     for (final s in _realtimeSubs) {
       s.cancel();
     }
@@ -100,7 +102,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
             .listen((_) => onData()));
       } catch (_) {}
     }
-
     watch('admin', _fetchAll);
     watch('teachers', _fetchAll);
     watch('students', _fetchAll);
@@ -111,7 +112,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
     watch('credential_change_requests', _loadPendingBadges);
     watch('alerts', _loadPendingBadges);
     watch('complaints', _loadPendingBadges);
+    // App-update popup when a newer version is published.
+    _updatePopups.start(context);
   }
+
+  final _updatePopups = AppUpdatePopupWatcher();
 
   /// Red badges for work waiting on the Admin.
   Future<void> _loadPendingBadges() async {

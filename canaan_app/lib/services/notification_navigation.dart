@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../services/notification_service.dart';
 import '../services/prayer_request_service.dart';
+import '../screens/app_update_popup.dart';
 import '../widgets/animations.dart';
 import '../screens/admin/authentication.dart';
 import '../screens/admin/alerts.dart';
@@ -300,6 +301,11 @@ class NotificationNavigation {
           return;
         }
         break;
+      case NotificationService.destAppUpdate:
+        // Update popup for every role (only shows when the published
+        // versionCode exceeds the installed one, otherwise confirms).
+        await showAppUpdateIfAvailable(context, announceUpToDate: true);
+        return;
       default:
         // dashboard / website_update / unknown: already marked read,
         // nothing further to open.
